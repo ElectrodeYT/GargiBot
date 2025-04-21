@@ -8,17 +8,20 @@ class ModerationCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    def __create_success_embed(self, user_affected, type):
+    def __create_success_embed(self, user_affected, type, guild: discord.Guild):
         embed = discord.Embed()
         embed.title = f'Member {type}'
         embed.description = f'**{user_affected.name}** has been {type}.'
 
         if type == 'banned':
             embed.colour = discord.Colour.red()
+            embed.set_thumbnail(url=db.get_ban_image_url(guild))
         elif type == 'unbanned':
             embed.colour = discord.Colour.green()
+            embed.set_thumbnail(url=db.get_unban_image_url(guild))
         elif type == 'kick':
             embed.colour = discord.Colour.yellow()
+            embed.set_thumbnail(url=db.get_kick_image_url(guild))
 
         return embed
 
@@ -74,7 +77,7 @@ class ModerationCog(commands.Cog):
 
         db.add_ban(ctx.guild, banned_user=user_to_ban, responsible_mod=ctx.author)
         await ctx.guild.ban(user=user_to_ban, reason=f'By {ctx.author.name} - {reason}', delete_message_days=0)
-        await ctx.send(embed=self.__create_success_embed(user_affected=user_to_ban, type="banned"))
+        await ctx.send(embed=self.__create_success_embed(user_affected=user_to_ban, type="banned", guild=ctx.guild))
         await self.__send_embed_to_log(ctx.guild, self.__create_log_embed(user_affected=user_to_ban,
                                                                           responsible_mod=ctx.author,
                                                                           reason=reason,
@@ -87,7 +90,7 @@ class ModerationCog(commands.Cog):
         await self.__send_dm(user_to_kick, action_type='kicked', guild=ctx.guild, reason=reason)
 
         await ctx.guild.kick(user=user_to_kick, reason=reason)
-        await ctx.send(embed=self.__create_success_embed(user_affected=user_to_kick, type="kicked"))
+        await ctx.send(embed=self.__create_success_embed(user_affected=user_to_kick, type="kicked", guild=ctx.guild))
         await self.__send_embed_to_log(ctx.guild, self.__create_log_embed(user_affected=user_to_kick,
                                                                           responsible_mod=ctx.author,
                                                                           reason=reason,
@@ -102,7 +105,7 @@ class ModerationCog(commands.Cog):
         except discord.errors.NotFound:
             await ctx.send(embed=self.__create_text_embed('This user is not banned!'))
             return
-        await ctx.send(embed=self.__create_success_embed(user_affected=user_to_unban, type="unbanned"))
+        await ctx.send(embed=self.__create_success_embed(user_affected=user_to_unban, type="unbanned", guild=ctx.guild))
         await self.__send_embed_to_log(ctx.guild, self.__create_log_embed(user_affected=user_to_unban,
                                                                           responsible_mod=ctx.author,
                                                                           reason=reason,

@@ -100,3 +100,13 @@ def get_ban_owner(guild: discord.Guild, banned_user: discord.User, approx_time: 
     pprint(results)
 
     return None
+
+# TODO: this entire stuff
+def get_ban_image_url(guild: discord.Guild) -> str:
+    return 'https://raw.githubusercontent.com/ElectrodeYT/GargiBot/refs/heads/master/gargibot.gif'
+
+def get_kick_image_url(guild: discord.Guild) -> str:
+    return 'https://raw.githubusercontent.com/ElectrodeYT/GargiBot/refs/heads/master/gargibot.gif'
+
+def get_unban_image_url(guild: discord.Guild) -> str:
+    return 'https://raw.githubusercontent.com/ElectrodeYT/GargiBot/refs/heads/master/gargibot.gif'

@@ -45,4 +45,5 @@ class ConfigCog(commands.Cog):
             url='https://github.com/ElectrodeYT/GargiBot',
             colour=discord.Colour.blue()
         )
+        embed.set_image(url='https://raw.githubusercontent.com/ElectrodeYT/GargiBot/refs/heads/master/gargibot.gif')
         await ctx.send(embed=embed)
