@@ -34,3 +34,15 @@ class ConfigCog(commands.Cog):
         cursor.close()
         db.config_db.commit()
         await interaction.response.send_message(f'Disabled logging')
+
+
+    @commands.hybrid_command(name='about')
+    async def about(self, ctx: commands.Context):
+        embed = discord.Embed(
+            title='GargiBot!',
+            description='Open-source moderation discord bot\n'
+                        'Source code: [here!](https://github.com/ElectrodeYT/GargiBot)',
+            url='https://github.com/ElectrodeYT/GargiBot',
+            colour=discord.Colour.blue()
+        )
+        await ctx.send(embed=embed)

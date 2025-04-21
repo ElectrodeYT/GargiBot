@@ -40,6 +40,10 @@ class LoggerCog(commands.Cog):
                 if before_perm[1] != after_perm[1]:
                     embed.add_field(name=f'Permission: {after_perm[0]}', value=f'{before_perm[1]} -> {after_perm[1]}')
 
+    #
+    # Messages
+    #
+
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         db.insert_message_into_db(message)
@@ -96,6 +100,10 @@ class LoggerCog(commands.Cog):
         await log_channel.send(embed=embed)
         db.insert_message_into_db(after)
 
+    #
+    # Members and Users
+    #
+
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
         log_channel = db.get_guild_log_channel(member.guild)
@@ -128,6 +136,8 @@ class LoggerCog(commands.Cog):
 
         await log_channel.send(embed=embed)
 
+    # Member ban logic
+    # Turns out, finding out exactly who banned who when banning through the bot is a bit funny, lol
     @commands.Cog.listener()
     async def on_member_ban(self, guild: discord.Guild, user: discord.User | discord.Member):
         log_channel = db.get_guild_log_channel(guild)
@@ -146,9 +156,13 @@ class LoggerCog(commands.Cog):
         embed = discord.Embed()
         embed.title = 'Member banned'
         embed.description = f'{self.__get_user_string(user)})'
+        embed.colour = discord.Color.red()
         if found_entry is not None:
             embed.add_field(name='Ban reason', value=found_entry.reason)
             responsible_mod = found_entry.user
+            # If the responsible mod is the bot itself, then we dont log here, the log was written by the ban command
+            if responsible_mod.id == self.bot.user.id:
+                return
             embed.add_field(name='Responsible mod', value=self.__get_user_string(responsible_mod))
         if user.display_avatar is not None:
             embed.set_thumbnail(url=user.display_avatar.url)
