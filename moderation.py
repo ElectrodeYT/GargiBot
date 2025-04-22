@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime, UTC
 from dateutil.relativedelta import relativedelta
 from pprint import pprint
 
@@ -6,7 +6,7 @@ import discord
 import db
 
 from discord.ext import commands
-
+from discord.ui import Button, View
 
 class ModerationCog(commands.Cog):
     def __init__(self, bot):
@@ -115,102 +115,179 @@ class ModerationCog(commands.Cog):
                                                                           reason=reason,
                                                                           type='unbanned'))
 
-    async def __get_banstats_between_dates(self, guild: discord.Guild, before: datetime.datetime, after: datetime.datetime) -> {}:
-        # Get the list of bans from audit log between the times
-        audit_log_ban_entries = [entry async for entry in guild.audit_logs(action=discord.AuditLogAction.ban, before=before, after=after)]
+    class BanStatsView(View):
+        current_begin_of_month: datetime
 
-        # Get the list of saved database bans between the times
-        database_saved_bans = db.get_bans_between(guild, before, after)
+        def __init__(self, bot, ctx, current_date):
+            super().__init__(timeout=600)
+            self.bot = bot
+            self.ctx = ctx
+            self.current_begin_of_month = current_date.replace(day=1)
 
-        # The actual banstats themselves
-        ban_stats = {}
+            # Add previous month button
+            prev_button = Button(label="← Previous Month", style=discord.ButtonStyle.secondary, custom_id="prev_month")
+            prev_button.callback = self.prev_month_callback
+            self.add_item(prev_button)
 
-        pprint(audit_log_ban_entries)
-        pprint(database_saved_bans)
+            # Add next month button
+            next_button = Button(label="Next Month →", style=discord.ButtonStyle.secondary, custom_id="next_month")
+            next_button.callback = self.next_month_callback
+            self.add_item(next_button)
 
-        # We now iterate the audit log bans
-        for audit_log_entry in audit_log_ban_entries:
-            # If the ban is made according to discord by the bot (or another user ID that we replace), then look up in
-            # the DB what the ban is
-            if audit_log_entry.user.id == self.bot.user.id:
-                # Try to find a database ban here
-                current_top_db_entry = None
-                for db_ban_entry in database_saved_bans:
-                    if db_ban_entry.banned_user_id == audit_log_entry.target.id and abs((audit_log_entry.created_at - db_ban_entry.banned_time).total_seconds()) <= 20:
-                        if current_top_db_entry is not None:
-                            # If we have a potential DB entry already saved, replace it with this one if the time difference is closer
-                            if abs((audit_log_entry.created_at - current_top_db_entry).total_seconds()) > abs((db_ban_entry.banned_time - current_top_db_entry).total_seconds()):
+        async def get_embed(self) -> discord.Embed:
+            # Get the beginning of this month
+            assert self.current_begin_of_month.day == 1
+
+            # Get the end of this month, or the current day if the month is not over
+            end_of_month = self.current_begin_of_month + relativedelta(months=1)
+
+            if end_of_month > datetime.now(UTC):
+                end_of_month = datetime.now(UTC)
+
+            # Get the initial banstats
+            ban_stats = await self.__get_banstats_between_dates(
+                guild=self.ctx.guild,
+                before=end_of_month,
+                after=self.current_begin_of_month
+            )
+
+            # Create the embed
+            ban_stats_embed = self.__banstats_to_embed(ban_stats)
+            self.__add_before_after_to_banstats_embed(ban_stats_embed, end_of_month, self.current_begin_of_month)
+
+            return ban_stats_embed
+
+        async def prev_month_callback(self, interaction: discord.Interaction) -> None:
+            self.current_begin_of_month = self.current_begin_of_month - relativedelta(months=1)
+            await self.update_stats(interaction)
+
+        async def next_month_callback(self, interaction: discord.Interaction) -> None:
+            new_date = self.current_begin_of_month + relativedelta(months=1)
+            if new_date <= datetime.now(UTC):
+                self.current_begin_of_month = new_date
+                await self.update_stats(interaction)
+            else:
+                await interaction.response.send_message("Cannot view future months!", ephemeral=True)
+
+        async def update_stats(self, interaction: discord.Interaction):
+            # Get the beginning of this month
+            assert self.current_begin_of_month.day == 1
+
+            # Get the end of this month, or the current day if the month is not over
+            end_of_month = self.current_begin_of_month + relativedelta(months=1)
+
+            if end_of_month > datetime.now(UTC):
+                end_of_month = datetime.now(UTC)
+
+            ban_stats = await self.__get_banstats_between_dates(
+                guild=interaction.guild,
+                before=end_of_month,
+                after=self.current_begin_of_month
+            )
+
+            ban_stats_embed = self.__banstats_to_embed(ban_stats)
+            self.__add_before_after_to_banstats_embed(ban_stats_embed, end_of_month, self.current_begin_of_month)
+
+            await interaction.response.edit_message(embed=ban_stats_embed, view=self)
+
+        def __banstats_to_embed(self, banstats: dict):
+            embed = discord.Embed()
+            embed.title = 'Ban stats'
+            embed.colour = discord.Colour.green()
+
+            if len(banstats.keys()) == 0:
+                embed.description = 'No (known) bans in the time period'
+            else:
+                descriptions = []
+                for mod in banstats.keys():
+                    if mod == 'untrackable':
+                        embed.add_field(name='Untrackable bans', value=banstats[mod], inline=False)
+                        continue
+
+                    assert type(banstats[mod]) is int
+                    user = self.bot.get_user(mod)
+                    user_name = user.name if user else f"Unknown User ({mod})"
+                    descriptions.append(f'{user_name} - {banstats[mod]} ban{"s" if banstats[mod] > 1 else ""}')
+
+                embed.description = '\n'.join(descriptions)
+
+            return embed
+
+        def __add_before_after_to_banstats_embed(self, embed: discord.Embed, before: datetime, after: datetime):
+            date_format_string = '%d. %b %Y'
+            embed.set_footer(
+                text=f'Banstats between {after.strftime(date_format_string)} and {before.strftime(date_format_string)}')
+
+        async def __get_banstats_between_dates(self, guild: discord.Guild, before: datetime, after: datetime) -> {}:
+            # Get the list of bans from audit log between the times
+            audit_log_ban_entries = [entry async for entry in
+                                     guild.audit_logs(action=discord.AuditLogAction.ban, before=before, after=after)]
+
+            # Get the list of saved database bans between the times
+            database_saved_bans = db.get_bans_between(guild, before, after)
+
+            # The actual banstats themselves
+            ban_stats = {}
+
+            pprint(audit_log_ban_entries)
+            pprint(database_saved_bans)
+
+            # We now iterate the audit log bans
+            for audit_log_entry in audit_log_ban_entries:
+                # If the ban is made according to discord by the bot (or another user ID that we replace), then look up in
+                # the DB what the ban is
+                if audit_log_entry.user.id == self.bot.user.id:
+                    # Try to find a database ban here
+                    current_top_db_entry = None
+                    for db_ban_entry in database_saved_bans:
+                        if db_ban_entry.banned_user_id == audit_log_entry.target.id and abs(
+                                (audit_log_entry.created_at - db_ban_entry.banned_time).total_seconds()) <= 20:
+                            if current_top_db_entry is not None:
+                                # If we have a potential DB entry already saved, replace it with this one if the time difference is closer
+                                if abs((audit_log_entry.created_at - current_top_db_entry).total_seconds()) > abs(
+                                        (db_ban_entry.banned_time - current_top_db_entry).total_seconds()):
+                                    current_top_db_entry = db_ban_entry
+                            else:
                                 current_top_db_entry = db_ban_entry
+
+                    # If we have no DB entry for this ban, log this, else, remove the entry from the DB list.
+                    if current_top_db_entry is None:
+                        print(
+                            f'DB-entry-less ban! Banned user is {audit_log_entry.target.id}, banned by {audit_log_entry.user.id} at {audit_log_entry.created_at} ({int(audit_log_entry.created_at.timestamp())}).')
+                        if 'untrackable' not in ban_stats:
+                            ban_stats['untrackable'] = 1
                         else:
-                            current_top_db_entry = db_ban_entry
-
-                # If we have no DB entry for this ban, log this, else, remove the entry from the DB list.
-                if current_top_db_entry is None:
-                    print(f'DB-entry-less ban! Banned user is {audit_log_entry.target.id}, banned by {audit_log_entry.user.id} at {audit_log_entry.created_at} ({int(audit_log_entry.created_at.timestamp())}).')
-                    if 'untrackable' not in ban_stats:
-                        ban_stats['untrackable'] = 1
+                            ban_stats['untrackable'] += 1
                     else:
-                        ban_stats['untrackable'] += 1
+                        # Increase the banstats for the responsible moderator
+                        if current_top_db_entry.responsible_mod_id not in ban_stats:
+                            ban_stats[current_top_db_entry.responsible_mod_id] = 1
+                        else:
+                            ban_stats[current_top_db_entry.responsible_mod_id] += 1
+
+                        database_saved_bans.remove(current_top_db_entry)
                 else:
-                    # Increase the banstats for the responsible moderator
-                    if current_top_db_entry.responsible_mod_id not in ban_stats:
-                        ban_stats[current_top_db_entry.responsible_mod_id] = 1
+                    # Increment the banstats for the moderator
+                    if audit_log_entry.user.id not in ban_stats:
+                        ban_stats[audit_log_entry.user.id] = 1
                     else:
-                        ban_stats[current_top_db_entry.responsible_mod_id] += 1
+                        ban_stats[audit_log_entry.user.id] += 1
 
-                    database_saved_bans.remove(current_top_db_entry)
-            else:
-                # Increment the banstats for the moderator
-                if audit_log_entry.user.id not in ban_stats:
-                    ban_stats[audit_log_entry.user.id] = 1
+            # Iterate through what is left of the DB entries
+            for db_ban_entry in database_saved_bans:
+                if db_ban_entry.responsible_mod_id not in ban_stats:
+                    ban_stats[db_ban_entry.responsible_mod_id] = 1
                 else:
-                    ban_stats[audit_log_entry.user.id] += 1
+                    ban_stats[db_ban_entry.responsible_mod_id] += 1
 
-        # Iterate through what is left of the DB entries
-        for db_ban_entry in database_saved_bans:
-            if db_ban_entry.responsible_mod_id not in ban_stats:
-                ban_stats[db_ban_entry.responsible_mod_id] = 1
-            else:
-                ban_stats[db_ban_entry.responsible_mod_id] += 1
-
-        pprint(ban_stats)
-
-        return ban_stats
-
-    def __banstats_to_embed(self, banstats: dict):
-        embed = discord.Embed()
-        embed.title = 'Ban stats'
-        embed.colour = discord.Colour.green()
-
-        if len(banstats.keys()) == 0:
-            embed.description = 'No (known) bans in the time period'
-        else:
-            for mod in banstats.keys():
-                if mod == 'untrackable':
-                    embed.add_field(name='Untrackable bans', value=banstats[mod], inline=False)
-                    continue
-
-                assert type(banstats[mod]) is int
-                embed.description = f'{self.bot.get_user(mod).name} - {banstats[mod]} ban{"s" if banstats[mod] > 1 else ""}'
-
-        return embed
-
-    def __add_before_after_to_banstats_embed(self, embed: discord.Embed, before: datetime.datetime, after: datetime.datetime):
-        date_format_string = '%d. %b %Y'
-        embed.set_footer(text=f'Banstats between {after.strftime(date_format_string)} and {before.strftime(date_format_string)}')
-
-    async def __do_banstats(self, ctx: commands.Context, before: datetime.datetime, after: datetime.datetime):
-        ban_stats = await self.__get_banstats_between_dates(guild=ctx.guild, before=before, after=after)
-        ban_stats_embed = self.__banstats_to_embed(ban_stats)
-        self.__add_before_after_to_banstats_embed(ban_stats_embed, before, after)
-        await ctx.send(embed=ban_stats_embed)
+            pprint(ban_stats)
+            return ban_stats
 
     @commands.hybrid_command(name='banstats', description='Get the amount of bans in the last month.')
     async def banstats(self, ctx: commands.Context):
-        current_time = datetime.datetime.now(datetime.UTC)
-        # Get the begin of the current calendar month.
-        begin_of_month = current_time.replace(day=1)
+        current_time = datetime.now(UTC)
+        view = self.BanStatsView(self.bot, ctx, current_time)
+        await ctx.send(embed=await view.get_embed(), view=view)
 
-        await self.__do_banstats(ctx, before=current_time, after=begin_of_month)
 
 
