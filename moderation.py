@@ -119,7 +119,7 @@ class ModerationCog(commands.Cog):
         current_begin_of_month: datetime
 
         def __init__(self, bot, ctx, current_date):
-            super().__init__(timeout=600)
+            super().__init__(timeout=None)
             self.bot = bot
             self.ctx = ctx
             self.current_begin_of_month = current_date.replace(day=1)
