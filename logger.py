@@ -12,10 +12,10 @@ class LoggerCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    def __get_user_string(self, user: discord.User | discord.Member) -> str:
+    def _get_user_string(self, user: discord.User | discord.Member) -> str:
         return f'{user.mention} ({user.name} - {user.id})'
 
-    def __roles_array_to_string(self, roles: list) -> str:
+    def _roles_array_to_string(self, roles: list) -> str:
         ret = ''
         for role in roles:
             if ret != '':
@@ -23,7 +23,7 @@ class LoggerCog(commands.Cog):
             ret += role.name
         return ret
 
-    def __add_permission_changes_to_embed(self, embed, before, after):
+    def _add_permission_changes_to_embed(self, embed, before, after):
         # Check if permissions are different
         if before.permissions != after.permissions:
             # Iterate both and add a field for each different one
@@ -61,7 +61,7 @@ class LoggerCog(commands.Cog):
         if event.cached_message is not None:
             message = event.cached_message
             embed.title = 'Message deleted'
-            embed.description = (f'By {self.__get_user_string(message.author)})\n'
+            embed.description = (f'By {self._get_user_string(message.author)})\n'
                                  f'```\n{message.content}\n```')
         else:
             # See if we can get the message from DB
@@ -93,7 +93,7 @@ class LoggerCog(commands.Cog):
 
         embed = discord.Embed()
         embed.title = 'Message edited'
-        embed.description = (f'Message edited by {self.__get_user_string(after.author)})\n'
+        embed.description = (f'Message edited by {self._get_user_string(after.author)})\n'
                              f'```\n{before.content}\n```\n->'
                              f'```\n{after.content}\n```\n')
 
@@ -113,7 +113,7 @@ class LoggerCog(commands.Cog):
 
         embed = discord.Embed()
         embed.title = 'Member joined'
-        embed.description = self.__get_user_string(member)
+        embed.description = self._get_user_string(member)
         embed.add_field(name='Account created', value=member.created_at.strftime('%m/%d/%Y %I:%M:%S %p'))
         if member.display_avatar is not None:
             embed.set_thumbnail(url=member.display_avatar.url)
@@ -130,7 +130,7 @@ class LoggerCog(commands.Cog):
 
         embed = discord.Embed()
         embed.title = 'Member left'
-        embed.description = f'{self.__get_user_string(event.user)})'
+        embed.description = f'{self._get_user_string(event.user)})'
         if event.user.display_avatar is not None:
             embed.set_thumbnail(url=event.user.display_avatar.url)
 
@@ -156,47 +156,47 @@ class LoggerCog(commands.Cog):
         embed = discord.Embed()
         embed.title = 'Member banned'
         embed.colour = discord.Color.red()
-        embed.add_field(name='Member', value=self.__get_user_string(user))
+        embed.add_field(name='Member', value=self._get_user_string(user))
         if found_entry is not None:
             embed.add_field(name='Ban reason', value=found_entry.reason)
             responsible_mod = found_entry.user
             # If the responsible mod is the bot itself, then we dont log here, the log was written by the ban command
             if responsible_mod.id == self.bot.user.id:
                 return
-            embed.add_field(name='Responsible mod', value=self.__get_user_string(responsible_mod))
+            embed.add_field(name='Responsible mod', value=self._get_user_string(responsible_mod))
             embed.add_field(name='Reason', value=found_entry.reason)
         if user.display_avatar is not None:
             embed.set_thumbnail(url=user.display_avatar.url)
         await log_channel.send(embed=embed)
 
-    async def __check_and_log_nick_update(self, before: discord.Member, after: discord.Member,
+    async def _check_and_log_nick_update(self, before: discord.Member, after: discord.Member,
                                           log_channel: discord.TextChannel):
         if before.nick != after.nick:
             embed = discord.Embed()
             embed.title = 'Nickname updated'
-            embed.description = f'User: {self.__get_user_string(after)}'
+            embed.description = f'User: {self._get_user_string(after)}'
             embed.add_field(name='Old nickname', value=before.nick)
             embed.add_field(name='New nickname', value=after.nick)
             await log_channel.send(embed=embed)
 
-    async def __check_and_log_roles_update(self, before: discord.Member, after: discord.Member,
+    async def _check_and_log_roles_update(self, before: discord.Member, after: discord.Member,
                                            log_channel: discord.TextChannel):
         if before.roles != after.roles:
             embed = discord.Embed()
             embed.title = 'Roles updated'
-            embed.description = f'User: {self.__get_user_string(after)}'
-            embed.add_field(name='Old roles', value=self.__roles_array_to_string(before.roles))
-            embed.add_field(name='New roles', value=self.__roles_array_to_string(after.roles))
+            embed.description = f'User: {self._get_user_string(after)}'
+            embed.add_field(name='Old roles', value=self._roles_array_to_string(before.roles))
+            embed.add_field(name='New roles', value=self._roles_array_to_string(after.roles))
             if after.display_avatar is not None:
                 embed.set_thumbnail(url=after.display_avatar.url)
             await log_channel.send(embed=embed)
 
-    async def __check_and_log_timeout_update(self, before: discord.Member, after: discord.Member,
+    async def _check_and_log_timeout_update(self, before: discord.Member, after: discord.Member,
                                              log_channel: discord.TextChannel):
         if before.timed_out_until != after.timed_out_until:
             embed = discord.Embed()
             embed.title = 'Timeout updated'
-            embed.description = f'User: {self.__get_user_string(after)}'
+            embed.description = f'User: {self._get_user_string(after)}'
             # Check if there was a previous timeout and if there was, check if it is in the past (aka expired)
             if before.timed_out_until is not None and before.timed_out_until > datetime.datetime.now(tz=datetime.timezone.utc):
                 embed.add_field(name='Old timeout', value=f'Until <t:{int(before.timed_out_until.timestamp())}:f>')
@@ -211,12 +211,12 @@ class LoggerCog(commands.Cog):
                 embed.set_thumbnail(url=after.display_avatar.url)
             await log_channel.send(embed=embed)
 
-    async def __check_and_log_username_update(self, before: discord.User, after: discord.User,
+    async def _check_and_log_username_update(self, before: discord.User, after: discord.User,
                                               log_channel: discord.TextChannel):
         if before.name != after.name:
             embed = discord.Embed()
             embed.title = 'Username updated'
-            embed.description = f'User: {self.__get_user_string(after)}'
+            embed.description = f'User: {self._get_user_string(after)}'
             embed.add_field(name='Old username', value=before.name)
             embed.add_field(name='New username', value=after.name)
             await log_channel.send(embed=embed)
@@ -229,7 +229,7 @@ class LoggerCog(commands.Cog):
             if log_channel is None:
                 return
 
-            await self.__check_and_log_username_update(before, after, log_channel)
+            await self._check_and_log_username_update(before, after, log_channel)
 
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member):
@@ -238,9 +238,9 @@ class LoggerCog(commands.Cog):
         if log_channel is None:
             return
 
-        await self.__check_and_log_nick_update(before, after, log_channel)
-        await self.__check_and_log_roles_update(before, after, log_channel)
-        await self.__check_and_log_timeout_update(before, after, log_channel)
+        await self._check_and_log_nick_update(before, after, log_channel)
+        await self._check_and_log_roles_update(before, after, log_channel)
+        await self._check_and_log_timeout_update(before, after, log_channel)
 
     #
     # Channels
@@ -346,6 +346,6 @@ class LoggerCog(commands.Cog):
         if before.name != after.name:
             embed.add_field(name='Old name', value=before.name)
 
-        self.__add_permission_changes_to_embed(embed, before, after)
+        self._add_permission_changes_to_embed(embed, before, after)
 
         await log_channel.send(embed=embed)
