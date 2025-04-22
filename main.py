@@ -6,6 +6,7 @@ from discord import app_commands
 import config
 import logger
 import moderation
+import tags
 
 # Read token enviroment variable
 token = os.environ["BOT_TOKEN"]
@@ -32,6 +33,7 @@ class Bot(commands.Bot):
             await self.add_cog(config.ConfigCog(bot))
             await self.add_cog(logger.LoggerCog(bot))
             await self.add_cog(moderation.ModerationCog(bot))
+            await self.add_cog(tags.TagCog(bot))
             added_cogs = True
         self.loop.create_task(self.startup())
 

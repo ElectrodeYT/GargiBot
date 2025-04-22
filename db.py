@@ -10,6 +10,7 @@ sqlite_db.execute('CREATE TABLE IF NOT EXISTS messages(message_id ID NOT NULL PR
                   'author_id ID NOT NULL, created_at TIMESTAMP NOT NULL)')
 sqlite_db.execute('CREATE TABLE IF NOT EXISTS ban_owners(guild ID, banned_user ID, responsible_mod ID, '
                   'banned_time EPOCH)')
+sqlite_db.execute('CREATE TABLE IF NOT EXISTS tags(guild ID, tag_name STRING PRIMARY KEY, tag_content STRING)')
 sqlite_db.commit()
 
 def guild_exists_in_config(guild):
@@ -142,3 +143,37 @@ def get_kick_image_url(guild: discord.Guild) -> str:
 
 def get_unban_image_url(guild: discord.Guild) -> str:
     return 'https://raw.githubusercontent.com/ElectrodeYT/GargiBot/refs/heads/master/gargibot.gif'
+
+def set_guild_tag(guild: discord.Guild, tag_name, tag_content: str):
+    cursor = sqlite_db.cursor()
+    cursor.execute('INSERT OR REPLACE INTO tags(guild, tag_name, tag_content) VALUES (?, ?, ?)',
+                   (guild.id, tag_name, tag_content))
+    cursor.close()
+    sqlite_db.commit()
+
+def get_guild_tag(guild: discord.Guild, tag_name: str) -> str | None:
+    cursor = sqlite_db.cursor()
+    cursor.execute('SELECT tag_content FROM tags WHERE guild=? AND tag_name=?', (guild.id, tag_name))
+    res = cursor.fetchone()
+    cursor.close()
+
+    if res is None:
+        return None
+    return res[0]
+
+def remove_guild_tag(guild: discord.Guild, tag_name: str):
+    cursor = sqlite_db.cursor()
+    cursor.execute('DELETE FROM tags WHERE guild=? AND tag_name=?', (guild.id, tag_name))
+    cursor.close()
+    sqlite_db.commit()
+
+def get_all_guild_tags(guild: discord.Guild) -> dict[str, str]:
+    cursor = sqlite_db.cursor()
+    cursor.execute('SELECT tag_name, tag_content FROM tags WHERE guild=?', (guild.id,))
+    res = cursor.fetchall()
+    cursor.close()
+
+    tags = {}
+    for tag_name, tag_content in res:
+        tags[tag_name] = tag_content
+    return tags
