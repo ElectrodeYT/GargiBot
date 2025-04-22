@@ -5,7 +5,8 @@ from datetime import datetime, timezone
 from pprint import pprint
 
 sqlite_db = sqlite3.connect('gargibot.db')
-sqlite_db.execute('CREATE TABLE IF NOT EXISTS config(guild ID PRIMARY KEY, log_channel CHANNEL)')
+sqlite_db.execute('CREATE TABLE IF NOT EXISTS config(guild ID PRIMARY KEY, log_channel CHANNEL, ban_image_url STRING DEFAULT \'\','
+                  ' kick_image_url STRING DEFAULT \'\', unban_image_url STRING DEFAULT \'\' )')
 sqlite_db.execute('CREATE TABLE IF NOT EXISTS messages(message_id ID NOT NULL PRIMARY KEY, contents STRING, '
                   'author_id ID NOT NULL, created_at TIMESTAMP NOT NULL)')
 sqlite_db.execute('CREATE TABLE IF NOT EXISTS ban_owners(guild ID, banned_user ID, responsible_mod ID, '
@@ -134,15 +135,42 @@ def get_bans_between(guild: discord.Guild, before: datetime, after: datetime) ->
 
     return results
 
-# TODO: this entire stuff
 def get_ban_image_url(guild: discord.Guild) -> str:
-    return 'https://raw.githubusercontent.com/ElectrodeYT/GargiBot/refs/heads/master/gargibot.gif'
+    cursor = sqlite_db.cursor()
+    cursor.execute('SELECT ban_image_url FROM config WHERE guild = ?', (guild.id,))
+    res = cursor.fetchone()
+    cursor.close()
+    if res is None or res[0] == '':
+        return 'https://raw.githubusercontent.com/ElectrodeYT/GargiBot/refs/heads/master/gargibot.gif'
+    return res[0]
 
 def get_kick_image_url(guild: discord.Guild) -> str:
-    return 'https://raw.githubusercontent.com/ElectrodeYT/GargiBot/refs/heads/master/gargibot.gif'
+    cursor = sqlite_db.cursor()
+    cursor.execute('SELECT kick_image_url FROM config WHERE guild = ?', (guild.id,))
+    res = cursor.fetchone()
+    cursor.close()
+    if res is None or res[0] == '':
+        return 'https://raw.githubusercontent.com/ElectrodeYT/GargiBot/refs/heads/master/gargibot.gif'
+    return res[0]
 
 def get_unban_image_url(guild: discord.Guild) -> str:
-    return 'https://raw.githubusercontent.com/ElectrodeYT/GargiBot/refs/heads/master/gargibot.gif'
+    cursor = sqlite_db.cursor()
+    cursor.execute('SELECT unban_image_url FROM config WHERE guild = ?', (guild.id,))
+    res = cursor.fetchone()
+    cursor.close()
+    if res is None or res[0] == '':
+        return 'https://raw.githubusercontent.com/ElectrodeYT/GargiBot/refs/heads/master/gargibot.gif'
+    return res[0]
+
+def set_image_url(guild: discord.Guild, image_url: str, type: str):
+    if type not in ['ban', 'kick', 'unban']:
+        raise ValueError('Invalid image type')
+
+    cursor = sqlite_db.cursor()
+    cursor.execute(f'UPDATE config SET {type}_image_url = ? WHERE guild = ?',
+                   ('' if image_url is None else image_url, guild.id))
+    cursor.close()
+    sqlite_db.commit()
 
 def set_guild_tag(guild: discord.Guild, tag_name, tag_content: str):
     cursor = sqlite_db.cursor()

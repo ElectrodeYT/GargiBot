@@ -1,5 +1,7 @@
 import discord
 
+from typing import Literal
+
 from discord.ext import commands
 from discord import app_commands
 
@@ -34,6 +36,16 @@ class ConfigCog(commands.Cog):
         db.config_db.commit()
         await interaction.response.send_message(f'Disabled logging')
 
+
+    @app_commands.command()
+    @commands.has_permissions(administrator=True)
+    @app_commands.describe(type='The type of image to set', url='The URL of the image; leave empty to set to default.')
+    async def set_image_url(self, interaction: discord.Interaction, type: Literal['ban', 'unban', 'kick'], url: str = None):
+        db.set_image_url(interaction.guild, url, type)
+        if url is not None:
+            await interaction.response.send_message(f'Successfully set {type} image URL to {url}', ephemeral=True)
+        else:
+            await interaction.response.send_message(f'Successfully set {type} image URL to default', ephemeral=True)
 
     @commands.hybrid_command(name='about')
     async def about(self, ctx: commands.Context):

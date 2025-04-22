@@ -302,7 +302,6 @@ class ModerationCog(commands.Cog):
                 else:
                     ban_stats[db_ban_entry.responsible_mod_id] += 1
 
-            pprint(ban_stats)
             return ban_stats
 
     @commands.hybrid_command(name='banstats', description='Get the amount of bans in the last month.')
