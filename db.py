@@ -1,6 +1,6 @@
 import sqlite3
 import discord
-import datetime
+from datetime import datetime, timezone
 
 from pprint import pprint
 
@@ -46,7 +46,7 @@ log_db.commit()
 class LoggedMessage:
     contents: str
     author_id: int
-    created_at: datetime.datetime
+    created_at: datetime
 
 def get_message_from_db(message_id: int) -> LoggedMessage | None:
     cursor = log_db.cursor()
@@ -60,7 +60,7 @@ def get_message_from_db(message_id: int) -> LoggedMessage | None:
     message = LoggedMessage()
     message.contents = res[0]
     message.author_id = res[1]
-    message.created_at = datetime.datetime.fromtimestamp(res[2])
+    message.created_at = datetime.fromtimestamp(res[2])
     return message
 
 
@@ -82,6 +82,11 @@ moderation_db.execute('CREATE TABLE IF NOT EXISTS ban_owners(guild ID, banned_us
                       'banned_time EPOCH)')
 moderation_db.commit()
 
+class SavedBan:
+    responsible_mod_id: int
+    banned_user_id: int
+    banned_time: datetime
+
 def add_ban(guild: discord.Guild, responsible_mod: discord.User, banned_user: discord.User):
     cursor = moderation_db.cursor()
     cursor.execute('INSERT INTO ban_owners(guild, banned_user, responsible_mod, banned_time) VALUES (?, ?, ?, unixepoch(\'now\'))',
@@ -100,6 +105,23 @@ def get_ban_owner(guild: discord.Guild, banned_user: discord.User, approx_time: 
     pprint(results)
 
     return None
+
+def get_bans_between(guild: discord.Guild, before: datetime, after: datetime) -> [SavedBan]:
+    cursor = moderation_db.cursor()
+    cursor.execute('SELECT banned_user, responsible_mod, banned_time FROM ban_owners WHERE guild=? AND banned_time BETWEEN ? and ?',
+                   (guild.id, int(after.timestamp()), int(before.timestamp())))
+    db_results = cursor.fetchall()
+
+    # Reformat the results from the database
+    results = []
+    for db_result in db_results:
+        ban_log_entry = SavedBan()
+        ban_log_entry.banned_user_id = db_result[0]
+        ban_log_entry.responsible_mod_id = db_result[1]
+        ban_log_entry.banned_time = datetime.fromtimestamp(db_result[2], tz=timezone.utc)
+        results.append(ban_log_entry)
+
+    return results
 
 # TODO: this entire stuff
 def get_ban_image_url(guild: discord.Guild) -> str:

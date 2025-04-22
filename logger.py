@@ -155,8 +155,8 @@ class LoggerCog(commands.Cog):
 
         embed = discord.Embed()
         embed.title = 'Member banned'
-        embed.description = f'{self.__get_user_string(user)})'
         embed.colour = discord.Color.red()
+        embed.add_field(name='Member', value=self.__get_user_string(user))
         if found_entry is not None:
             embed.add_field(name='Ban reason', value=found_entry.reason)
             responsible_mod = found_entry.user
@@ -164,6 +164,7 @@ class LoggerCog(commands.Cog):
             if responsible_mod.id == self.bot.user.id:
                 return
             embed.add_field(name='Responsible mod', value=self.__get_user_string(responsible_mod))
+            embed.add_field(name='Reason', value=found_entry.reason)
         if user.display_avatar is not None:
             embed.set_thumbnail(url=user.display_avatar.url)
         await log_channel.send(embed=embed)
