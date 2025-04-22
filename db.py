@@ -87,6 +87,11 @@ class SavedBan:
     banned_user_id: int
     banned_time: datetime
 
+    def __repr__(self):
+        return (f'SavedBan(responsible_mod_id={self.responsible_mod_id}, '
+                f'banned_user_id={self.banned_user_id}, '
+                f'banned_time={int(self.banned_time.timestamp())})')
+
 def add_ban(guild: discord.Guild, responsible_mod: discord.User, banned_user: discord.User):
     cursor = moderation_db.cursor()
     cursor.execute('INSERT INTO ban_owners(guild, banned_user, responsible_mod, banned_time) VALUES (?, ?, ?, unixepoch(\'now\'))',
@@ -94,6 +99,17 @@ def add_ban(guild: discord.Guild, responsible_mod: discord.User, banned_user: di
     cursor.close()
     moderation_db.commit()
 
+def add_audit_log_ban(guild: discord.Guild, audit_log_entry: discord.AuditLogEntry):
+    print(f'Adding audit log ban for {audit_log_entry.target.name} ({audit_log_entry.target.id}),'
+          f' by {audit_log_entry.user.name} ({audit_log_entry.user.id})'
+          f' guild {guild.name} ({guild.id}), '
+          f' ban time {audit_log_entry.created_at} ({int(audit_log_entry.created_at.timestamp())}) to database.')
+
+    cursor = moderation_db.cursor()
+    cursor.execute('INSERT INTO ban_owners(guild, banned_user, responsible_mod, banned_time) VALUES (?, ?, ?, ?)',
+                   (guild.id, audit_log_entry.target.id, audit_log_entry.user.id, int(audit_log_entry.created_at.timestamp())))
+    cursor.close()
+    moderation_db.commit()
 
 def get_ban_owner(guild: discord.Guild, banned_user: discord.User, approx_time: datetime) -> discord.User | None:
     cursor = moderation_db.cursor()

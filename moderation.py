@@ -218,6 +218,39 @@ class ModerationCog(commands.Cog):
             embed.set_footer(
                 text=f'Banstats between {after.strftime(date_format_string)} and {before.strftime(date_format_string)}')
 
+        def __get_audit_log_ban_in_db(self, audit_log_entry: discord.AuditLogEntry, database_saved_bans: []) -> ():
+            debug_this = False
+            if debug_this:
+                print(f'Trying to find ban in DB for {audit_log_entry.target.id} at {audit_log_entry.created_at} ({int(audit_log_entry.created_at.timestamp())}).')
+
+            # Try to find a database ban here
+            current_top_db_entry = None
+            for db_ban_entry in database_saved_bans:
+                if debug_this:
+                    print(f'-> Entry: {db_ban_entry.banned_user_id} - {int(db_ban_entry.banned_time.timestamp())}, '
+                          f'responsible mod: {db_ban_entry.responsible_mod_id}')
+                if db_ban_entry.banned_user_id == audit_log_entry.target.id and abs(
+                        (audit_log_entry.created_at - db_ban_entry.banned_time).total_seconds()) <= 20:
+                    if current_top_db_entry is not None:
+                        # If we have a potential DB entry already saved, replace it with this one if the time difference is closer
+                        if abs((audit_log_entry.created_at - current_top_db_entry.banned_time).total_seconds()) > abs(
+                                (db_ban_entry.banned_time - current_top_db_entry.banned_time).total_seconds()):
+                            if debug_this:
+                                print('--> Choosing this one as a replacement')
+                            current_top_db_entry = db_ban_entry
+                    else:
+                        if debug_this:
+                            print('--> Choosing this one as a first')
+                        current_top_db_entry = db_ban_entry
+
+            # If we have no DB entry for this ban, log this, else, remove the entry from the DB list.
+            if current_top_db_entry is None:
+                print(f'DB-entry-less ban! Banned user is {audit_log_entry.target.id}, banned by {audit_log_entry.user.id} at {audit_log_entry.created_at} ({int(audit_log_entry.created_at.timestamp())}).')
+            else:
+                database_saved_bans.remove(current_top_db_entry)
+
+            return current_top_db_entry
+
         async def __get_banstats_between_dates(self, guild: discord.Guild, before: datetime, after: datetime) -> {}:
             # Get the list of bans from audit log between the times
             audit_log_ban_entries = [entry async for entry in
@@ -229,49 +262,38 @@ class ModerationCog(commands.Cog):
             # The actual banstats themselves
             ban_stats = {}
 
-            pprint(audit_log_ban_entries)
-            pprint(database_saved_bans)
-
             # We now iterate the audit log bans
             for audit_log_entry in audit_log_ban_entries:
-                # If the ban is made according to discord by the bot (or another user ID that we replace), then look up in
-                # the DB what the ban is
-                if audit_log_entry.user.id == self.bot.user.id:
-                    # Try to find a database ban here
-                    current_top_db_entry = None
-                    for db_ban_entry in database_saved_bans:
-                        if db_ban_entry.banned_user_id == audit_log_entry.target.id and abs(
-                                (audit_log_entry.created_at - db_ban_entry.banned_time).total_seconds()) <= 20:
-                            if current_top_db_entry is not None:
-                                # If we have a potential DB entry already saved, replace it with this one if the time difference is closer
-                                if abs((audit_log_entry.created_at - current_top_db_entry).total_seconds()) > abs(
-                                        (db_ban_entry.banned_time - current_top_db_entry).total_seconds()):
-                                    current_top_db_entry = db_ban_entry
-                            else:
-                                current_top_db_entry = db_ban_entry
+                # Look up the ban in the DB
+                db_ban_entry = self.__get_audit_log_ban_in_db(audit_log_entry, database_saved_bans)
 
-                    # If we have no DB entry for this ban, log this, else, remove the entry from the DB list.
-                    if current_top_db_entry is None:
-                        print(
-                            f'DB-entry-less ban! Banned user is {audit_log_entry.target.id}, banned by {audit_log_entry.user.id} at {audit_log_entry.created_at} ({int(audit_log_entry.created_at.timestamp())}).')
-                        if 'untrackable' not in ban_stats:
-                            ban_stats['untrackable'] = 1
-                        else:
-                            ban_stats['untrackable'] += 1
+                # If the ban is not in the DB, and it was made by us, then it is untrackable
+                if db_ban_entry is None and audit_log_entry.user.id == self.bot.user.id:
+                    if 'untrackable' not in ban_stats:
+                        ban_stats['untrackable'] = 1
                     else:
-                        # Increase the banstats for the responsible moderator
-                        if current_top_db_entry.responsible_mod_id not in ban_stats:
-                            ban_stats[current_top_db_entry.responsible_mod_id] = 1
-                        else:
-                            ban_stats[current_top_db_entry.responsible_mod_id] += 1
-
-                        database_saved_bans.remove(current_top_db_entry)
+                        ban_stats['untrackable'] += 1
+                    continue
+                # If the ban was made by us, and we found a DB entry for it, increment the banstats for the moderator
+                elif audit_log_entry.user.id == self.bot.user.id:
+                    if db_ban_entry.responsible_mod_id not in ban_stats:
+                        ban_stats[db_ban_entry.responsible_mod_id] = 1
+                    else:
+                        ban_stats[db_ban_entry.responsible_mod_id] += 1
+                # If the ban is not in the DB, but it was not made by us, then it was made manually;
+                # add it to the DB, and add it to the banstats
                 else:
+                    if db_ban_entry is None:
+                        db.add_audit_log_ban(guild, audit_log_entry)
+
                     # Increment the banstats for the moderator
                     if audit_log_entry.user.id not in ban_stats:
                         ban_stats[audit_log_entry.user.id] = 1
                     else:
                         ban_stats[audit_log_entry.user.id] += 1
+
+            # Log how many bans are in the DB and not in the audit log
+            print(f'Bans in DB and not audit log: {len(database_saved_bans)}')
 
             # Iterate through what is left of the DB entries
             for db_ban_entry in database_saved_bans:
