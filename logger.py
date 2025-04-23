@@ -397,3 +397,29 @@ class LoggerCog(commands.Cog):
         self._add_permission_changes_to_embed(embed, before, after)
 
         await log_channel.send(embed=embed)
+
+    #
+    # Voice state changes
+    #
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
+        log_channel = db.get_guild_log_channel(member.guild)
+
+        if log_channel is None:
+            return
+
+        embed = discord.Embed()
+        embed.title = 'Voice state updated'
+        embed.description = f'Member: {self._get_user_string(member)}'
+
+        # Slightly weird pythonic code to make this a bit shorter and more easily extensible
+        fields = ['deaf', 'mute', 'self_deaf', 'self_mute', 'self_stream', 'self_video', 'suppress',
+                  'requested_to_speak_at', 'afk', 'channel']
+
+        for field in fields:
+            if getattr(before, field) != getattr(after, field):
+                embed.add_field(name=field.capitalize().replace('_', ' '),
+                                value=f'{getattr(before, field)} -> {getattr(after, field)}')
+
+        await log_channel.send(embed=embed)
