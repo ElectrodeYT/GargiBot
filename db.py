@@ -1,10 +1,11 @@
 import sqlite3
+import os
 import discord
 from datetime import datetime, timezone
 
 from pprint import pprint
 
-sqlite_db = sqlite3.connect('gargibot.db')
+sqlite_db = sqlite3.connect(os.environ.get('DB_FILENAME', 'gargibot.db'))
 sqlite_db.execute('CREATE TABLE IF NOT EXISTS config(guild ID PRIMARY KEY, log_channel CHANNEL DEFAULT NULL, ban_image_url STRING DEFAULT NULL,'
                   ' kick_image_url STRING DEFAULT NULL, unban_image_url STRING DEFAULT NULL, active_user_stat_channel CHANNEL DEFAULT NULL, '
                   'total_users_stat_channel CHANNEL DEFAULT NULL)')
