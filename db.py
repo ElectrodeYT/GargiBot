@@ -13,6 +13,10 @@ sqlite_db.execute('CREATE TABLE IF NOT EXISTS messages(message_id ID NOT NULL PR
 sqlite_db.execute('CREATE TABLE IF NOT EXISTS ban_owners(guild ID, banned_user ID, responsible_mod ID, '
                   'banned_time EPOCH)')
 sqlite_db.execute('CREATE TABLE IF NOT EXISTS tags(guild ID, tag_name STRING PRIMARY KEY, tag_content STRING)')
+sqlite_db.execute('CREATE TABLE IF NOT EXISTS user_activity(guild ID, user_id ID, days_since_epoch ID, first_active_time EPOCH, last_active_time EPOCH, '
+                  'PRIMARY KEY(guild, user_id, days_since_epoch))')
+sqlite_db.execute('CREATE TABLE IF NOT EXISTS total_user_count(guild ID, days_since_epoch ID, total_users INT, '
+                  'PRIMARY KEY(guild, days_since_epoch))')
 sqlite_db.commit()
 
 def guild_exists_in_config(guild):
@@ -44,6 +48,117 @@ def get_guild_log_channel(guild: discord.Guild) -> discord.TextChannel | None:
         return None
 
     return guild.get_channel(res[0])
+
+def get_guild_active_user_stat_channel(guild: discord.Guild) -> discord.abc.GuildChannel | None:
+    cursor = sqlite_db.cursor()
+    cursor.execute('SELECT active_user_stat_channel FROM config WHERE guild = ?', (guild.id,))
+    res = cursor.fetchone()
+    cursor.close()
+
+    if res is None or res == 0:
+        return None
+    return guild.get_channel(res[0])
+
+def get_guild_total_users_stat_channel(guild: discord.Guild) -> discord.abc.GuildChannel | None:
+    cursor = sqlite_db.cursor()
+    cursor.execute('SELECT total_users_stat_channel FROM config WHERE guild = ?', (guild.id,))
+    res = cursor.fetchone()
+    cursor.close()
+
+    if res is None or res == 0:
+        return None
+    return guild.get_channel(res[0])
+
+def update_user_activity(guild: discord.Guild, user: discord.User | discord.Member):
+    global __last_sqlite_db_commit_for_user_activity
+    if '__last_sqlite_db_commit_for_user_activity' not in globals():
+        __last_sqlite_db_commit_for_user_activity = datetime.now(timezone.utc)
+
+    # Store the current time we use for this for the 1 in a million chance that the day rolls over during the function
+    current_time = datetime.now(timezone.utc)
+    days_since_epoch = (current_time - datetime(1970, 1, 1, tzinfo=timezone.utc)).days
+
+    cursor = sqlite_db.cursor()
+    cursor.execute('SELECT COUNT(*) FROM user_activity WHERE guild = ? AND user_id = ? AND days_since_epoch = ?',
+                   (guild.id, user.id, days_since_epoch))
+    exists = cursor.fetchone()[0] > 0
+
+    if exists:
+        cursor.execute(
+            'UPDATE user_activity SET last_active_time = ? WHERE guild = ? AND user_id = ? AND days_since_epoch = ?',
+            (int(current_time.timestamp()), guild.id, user.id, days_since_epoch))
+    else:
+        cursor.execute(
+            'INSERT INTO user_activity(guild, user_id, days_since_epoch, first_active_time, last_active_time) VALUES (?, ?, ?, ?, ?)',
+            (guild.id, user.id, days_since_epoch, int(current_time.timestamp()), int(current_time.timestamp())))
+
+    cursor.close()
+
+    # We don't issue sqlite db commits for this too often, since this function will fire _very_ often
+    if (current_time - __last_sqlite_db_commit_for_user_activity).total_seconds() > 10:
+        __last_sqlite_db_commit_for_user_activity = current_time
+        sqlite_db.commit()
+
+def get_this_day_active_user_count(guild: discord.Guild):
+    cursor = sqlite_db.cursor()
+    cursor.execute('SELECT COUNT(*) FROM user_activity WHERE guild = ? AND days_since_epoch = ?',
+                   (guild.id, (datetime.now(timezone.utc) - datetime(1970, 1, 1, tzinfo=timezone.utc)).days))
+    res = cursor.fetchone()
+    cursor.close()
+
+    if res is None:
+        return 0
+    return res[0]
+
+def get_last_day_active_user_count(guild: discord.Guild):
+    cursor = sqlite_db.cursor()
+    cursor.execute('SELECT COUNT(*) FROM user_activity WHERE guild = ? AND days_since_epoch = ?',
+                   (guild.id, (datetime.now(timezone.utc) - datetime(1970, 1, 1, tzinfo=timezone.utc)).days - 1))
+    res = cursor.fetchone()
+    cursor.close()
+
+    if res is None:
+        return 0
+    return res[0]
+
+def update_total_user_count(guild: discord.Guild):
+    global __last_sqlite_db_commit_for_total_user_count
+    if '__last_sqlite_db_commit_for_total_user_count' not in globals():
+        __last_sqlite_db_commit_for_total_user_count = datetime.now(timezone.utc)
+
+    cursor = sqlite_db.cursor()
+    cursor.execute('SELECT COUNT(*) FROM total_user_count WHERE guild = ? AND days_since_epoch = ?',
+                   (guild.id, (datetime.now(timezone.utc) - datetime(1970, 1, 1, tzinfo=timezone.utc)).days))
+    exists = cursor.fetchone()[0] > 0
+
+    if exists:
+        cursor.execute(
+            'UPDATE total_user_count SET total_users = ? WHERE guild = ? AND days_since_epoch = ?',
+            (guild.member_count, guild.id,
+             (datetime.now(timezone.utc) - datetime(1970, 1, 1, tzinfo=timezone.utc)).days)
+        )
+    else:
+        cursor.execute(
+            'INSERT INTO total_user_count(guild, days_since_epoch, total_users) VALUES (?, ?, ?)',
+            (guild.id, (datetime.now(timezone.utc) - datetime(1970, 1, 1, tzinfo=timezone.utc)).days,
+             guild.member_count)
+        )
+
+    cursor.close()
+    # We don't issue sqlite db commits for this too often, since this function will fire _very_ often
+    if (datetime.now(timezone.utc) - __last_sqlite_db_commit_for_total_user_count).total_seconds() > 10:
+        __last_sqlite_db_commit_for_total_user_count = datetime.now(timezone.utc)
+        sqlite_db.commit()
+
+def get_last_day_total_user_count(guild: discord.Guild) -> int | None:
+    cursor = sqlite_db.cursor()
+    cursor.execute('SELECT total_users FROM total_user_count WHERE guild = ? AND days_since_epoch = ?',
+                   (guild.id, (datetime.now(timezone.utc) - datetime(1970, 1, 1, tzinfo=timezone.utc)).days - 1))
+    res = cursor.fetchone()
+    cursor.close()
+    if res is None:
+        return None
+    return res[0]
 
 class LoggedMessage:
     contents: str

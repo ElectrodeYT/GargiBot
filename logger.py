@@ -1,7 +1,7 @@
 import discord
 import datetime
 
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import app_commands, role
 
 from pprint import pprint
@@ -9,8 +9,13 @@ from pprint import pprint
 import db
 
 class LoggerCog(commands.Cog):
+    currently_known_guild_activity_levels: {}
+    last_active_user_channel_update: {}
+
     def __init__(self, bot):
         self.bot = bot
+        self.currently_known_guild_activity_levels = {}
+        self.last_active_user_channel_update = {}
 
     def _get_user_string(self, user: discord.User | discord.Member) -> str:
         return f'{user.mention} ({user.name} - {user.id})'
@@ -40,13 +45,51 @@ class LoggerCog(commands.Cog):
                 if before_perm[1] != after_perm[1]:
                     embed.add_field(name=f'Permission: {after_perm[0]}', value=f'{before_perm[1]} -> {after_perm[1]}')
 
+    async def _handle_active_user_stat_change(self, guild: discord.Guild, member: discord.Member):
+        db.update_user_activity(guild, member)
+
+        active_user_stat_channel = db.get_guild_active_user_stat_channel(guild)
+        if active_user_stat_channel is None:
+            return
+
+        active_user_count = db.get_this_day_active_user_count(guild)
+        last_day_active_user_count = db.get_last_day_active_user_count(guild)
+        if guild.id not in self.currently_known_guild_activity_levels or self.currently_known_guild_activity_levels[guild.id] != active_user_count:
+            self.currently_known_guild_activity_levels[guild.id] = active_user_count
+            if guild.id not in self.last_active_user_channel_update or (datetime.datetime.now(datetime.timezone.utc) - self.last_active_user_channel_update[guild.id]).total_seconds() > 60:
+                self.last_active_user_channel_update[guild.id] = datetime.datetime.now(datetime.timezone.utc)
+                await active_user_stat_channel.edit(name=f'Active Today: {active_user_count} ({active_user_count - last_day_active_user_count})')
+                print(f'Active user count updated for guild {guild.id} to {active_user_count}')
+
+
+    # We also run this function every night at 1 minute past UTC midnight
+    @tasks.loop(time=datetime.time(hour=0, minute=1, tzinfo=datetime.timezone.utc))
+    async def _handle_total_user_count_change(self, guild: discord.Guild):
+        db.update_total_user_count(guild)
+
+        total_user_count_stat_channel = db.get_guild_total_users_stat_channel(guild)
+        if total_user_count_stat_channel is None:
+            return
+
+        total_user_count = guild.member_count
+        last_day_total_user_count = db.get_last_day_total_user_count(guild)
+
+        await total_user_count_stat_channel.edit(name=f'Total Users: {total_user_count} '
+                                                      f'({total_user_count - last_day_total_user_count if last_day_total_user_count is not None else 'N/A'})')
+
     #
     # Messages
     #
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
+        # We await this at the end to try and multitask this stuff a bit more
+        if message.guild is not None and message.author is not None and message.author.id != self.bot.user.id:
+            stat_update_coroutine = self._handle_active_user_stat_change(message.guild, message.author)
         db.insert_message_into_db(message)
+
+        if 'stat_update_coroutine' in locals():
+            await stat_update_coroutine
 
     @commands.Cog.listener()
     async def on_raw_message_delete(self, event: discord.RawMessageDeleteEvent):
@@ -106,6 +149,7 @@ class LoggerCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
+        guild_total_member_count_update_coroutine = self._handle_total_user_count_change(member.guild)
         log_channel = db.get_guild_log_channel(member.guild)
 
         if log_channel is None:
@@ -119,10 +163,13 @@ class LoggerCog(commands.Cog):
             embed.set_thumbnail(url=member.display_avatar.url)
 
         await log_channel.send(embed=embed)
+        await guild_total_member_count_update_coroutine
 
     @commands.Cog.listener()
     async def on_raw_member_remove(self, event: discord.RawMemberRemoveEvent):
         guild = self.bot.get_guild(event.guild_id)
+        guild_total_member_count_update_coroutine = self._handle_total_user_count_change(guild)
+
         log_channel = db.get_guild_log_channel(guild)
 
         if log_channel is None:
@@ -135,6 +182,7 @@ class LoggerCog(commands.Cog):
             embed.set_thumbnail(url=event.user.display_avatar.url)
 
         await log_channel.send(embed=embed)
+        await guild_total_member_count_update_coroutine
 
     # Member ban logic
     # Turns out, finding out exactly who banned who when banning through the bot is a bit funny, lol
