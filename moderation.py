@@ -1,4 +1,4 @@
-from datetime import datetime, UTC, timezone
+from datetime import datetime, UTC, timezone, timedelta
 from typing import Literal, List
 from dateutil.relativedelta import relativedelta
 from pathlib import Path
@@ -6,6 +6,7 @@ from pathlib import Path
 import discord
 import os
 import db
+from pytimeparse.timeparse import timeparse
 
 from discord.ext import commands
 from discord.ui import Button, View
@@ -15,11 +16,13 @@ purge_logs_location.mkdir(parents=True, exist_ok=True)
 
 purge_logs_url_prepend = os.environ.get('PURGE_LOGS_URL_PREPEND')
 
+
 class ModerationCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    def _create_success_embed(self, user_affected: discord.User | discord.Member, type: str, guild: discord.Guild) -> discord.Embed:
+    def _create_success_embed(self, user_affected: discord.User | discord.Member, type: str,
+                              guild: discord.Guild) -> discord.Embed:
         embed = discord.Embed()
         embed.title = f'Member {type}'
         embed.description = f'**{user_affected.name}** has been {type}.'
@@ -85,7 +88,8 @@ class ModerationCog(commands.Cog):
 
     @commands.hybrid_command(name='ban', description='Ban a member from this guild.', aliases=['naenae'])
     @commands.has_permissions(ban_members=True)
-    async def ban(self, ctx: commands.Context, user_to_ban: discord.User | discord.Member, *, reason: str | None = None) -> None:
+    async def ban(self, ctx: commands.Context, user_to_ban: discord.User | discord.Member, *,
+                  reason: str | None = None) -> None:
         if ctx.guild is None:
             await ctx.send('This command can only be used in a guild.', ephemeral=True)
             return
@@ -112,7 +116,8 @@ class ModerationCog(commands.Cog):
 
     @commands.hybrid_command(name='kick', description='Kick a member from this guild.', aliases=['dabon'])
     @commands.has_permissions(kick_members=True)
-    async def kick(self, ctx: commands.Context, user_to_kick: discord.User | discord.Member, *, reason: str | None = None) -> None:
+    async def kick(self, ctx: commands.Context, user_to_kick: discord.User | discord.Member, *,
+                   reason: str | None = None) -> None:
         if ctx.guild is None:
             await ctx.send('This command can only be used in a guild.', ephemeral=True)
             return
@@ -138,7 +143,8 @@ class ModerationCog(commands.Cog):
 
     @commands.hybrid_command(name='unban', description='Unban a member from this guild.', aliases=['whip'])
     @commands.has_permissions(ban_members=True)
-    async def unban(self, ctx: commands.Context, user_to_unban: discord.User | discord.Member, *, reason: str | None = None) -> None:
+    async def unban(self, ctx: commands.Context, user_to_unban: discord.User | discord.Member, *,
+                    reason: str | None = None) -> None:
         if ctx.guild is None:
             await ctx.send('This command can only be used in a guild.', ephemeral=True)
             return
@@ -159,6 +165,96 @@ class ModerationCog(commands.Cog):
                                                                         responsible_mod=ctx.author,
                                                                         reason=reason,
                                                                         log_type='unbanned'))
+
+    @commands.hybrid_command(name='mute', description='Mute a member from this guild.', aliases=['shush', 'timeout'])
+    @commands.has_permissions(kick_members=True)
+    async def mute(self, ctx: commands.Context, user_to_mute: discord.Member, time: str | None = None, *,
+                   reason: str | None = None) -> None:
+        if ctx.guild is None:
+            await ctx.send('This command can only be used in a guild.', ephemeral=True)
+            return
+
+        if user_to_mute.id == self.bot.user.id:
+            await ctx.send('You cannot mute me!', ephemeral=True)
+
+        if ctx.author is None:
+            await ctx.send('Somehow, the author of the command could not be determined; '
+                           'please report this bug to electrode!', ephemeral=True)
+            return
+
+        mute_time_delta: timedelta | None = None
+        indefinite_mute: bool = False
+
+        if time is not None:
+            mute_time_seconds = timeparse(time)
+            if mute_time_seconds is None:
+                # If the time parse failed, then prepend this to the reason
+                if reason is None:
+                    reason = time
+                else:
+                    reason = time + ' ' + reason
+            else:
+                # We can only mute in int amount of seconds
+                mute_time_seconds = int(mute_time_seconds)
+
+                if mute_time_seconds <= 0:
+                    await ctx.send('The amount of time to mute for must be positive!', ephemeral=True)
+                    return
+
+                mute_time_delta = timedelta(seconds=mute_time_seconds)
+
+        # If we have no passed time, or time passing failed, mute as long as we can
+        if mute_time_delta is None:
+            mute_time_delta = timedelta(days=28)
+            indefinite_mute = True
+
+        await user_to_mute.timeout(mute_time_delta, reason=f'By {ctx.author.name} - {reason}')
+
+        # Send the embed that is sent into the channel
+        embed = discord.Embed(description=f'Muted {user_to_mute.mention} '
+                                          f'{('for' + str(mute_time_delta)) if not indefinite_mute else 'indefinitely'}'
+                                          f' - `{reason}`', color=discord.Color.orange())
+        await ctx.send(embed=embed)
+
+        # Send a log for this
+        embed = self._create_log_embed(user_affected=user_to_mute,
+                                       responsible_mod=ctx.author,
+                                       reason=reason,
+                                       log_type='muted')
+        embed.add_field(name='Duration', value=str(mute_time_delta)
+                                               + (' (as long as possible)' if indefinite_mute else ''),
+                        inline=False)
+        await self._send_embed_to_log(ctx.guild, embed)
+
+    @commands.hybrid_command(name='unmute', description='Unmute a member from this guild.', aliases=['unshush'])
+    @commands.has_permissions(kick_members=True)
+    async def unmute(self, ctx: commands.Context, user_to_unmute: discord.Member) -> None:
+        if ctx.guild is None:
+            await ctx.send('This command can only be used in a guild.', ephemeral=True)
+            return
+
+        if user_to_unmute.id == self.bot.user.id:
+            await ctx.send('You cannot unmute me!', ephemeral=True)
+
+        if ctx.author is None:
+            await ctx.send('Somehow, the author of the command could not be determined; '
+                           'please report this bug to electrode!', ephemeral=True)
+            return
+
+        if user_to_unmute.timed_out_until is None or user_to_unmute.timed_out_until <= datetime.now(UTC):
+            await ctx.send('This user is not muted!', ephemeral=True)
+            return
+
+        await user_to_unmute.timeout(None, reason=f'By - {ctx.author.name}')
+
+        embed = discord.Embed(description=f'Unmuted {user_to_unmute.mention}.', color=discord.Color.green())
+        await ctx.send(embed=embed)
+
+        embed = self._create_log_embed(user_affected=user_to_unmute,
+                                       responsible_mod=ctx.author,
+                                       reason=None,
+                                       log_type='unmuted')
+        await self._send_embed_to_log(ctx.guild, embed)
 
     class BanStatsView(View):
         current_begin_of_month: datetime
@@ -272,7 +368,8 @@ class ModerationCog(commands.Cog):
 
             debug_this = False
             if debug_this:
-                print(f'Trying to find ban in DB for {audit_log_entry.target.id} at {audit_log_entry.created_at} ({int(audit_log_entry.created_at.timestamp())}).')
+                print(
+                    f'Trying to find ban in DB for {audit_log_entry.target.id} at {audit_log_entry.created_at} ({int(audit_log_entry.created_at.timestamp())}).')
 
             # Try to find a database ban here
             current_top_db_entry: db.SavedBan | None = None
@@ -296,13 +393,15 @@ class ModerationCog(commands.Cog):
 
             # If we have no DB entry for this ban, log this, else, remove the entry from the DB list.
             if current_top_db_entry is None:
-                print(f'DB-entry-less ban! Banned user is {audit_log_entry.target.id}, banned by {audit_log_entry.user.id} at {audit_log_entry.created_at} ({int(audit_log_entry.created_at.timestamp())}).')
+                print(
+                    f'DB-entry-less ban! Banned user is {audit_log_entry.target.id}, banned by {audit_log_entry.user.id} at {audit_log_entry.created_at} ({int(audit_log_entry.created_at.timestamp())}).')
             else:
                 database_saved_bans.remove(current_top_db_entry)
 
             return current_top_db_entry
 
-        async def _get_banstats_between_dates(self, guild: discord.Guild, before: datetime, after: datetime) -> dict[int | str, int]:
+        async def _get_banstats_between_dates(self, guild: discord.Guild, before: datetime, after: datetime) -> dict[
+            int | str, int]:
             # Get the list of bans from audit log between the times
             audit_log_ban_entries = [entry async for entry in
                                      guild.audit_logs(action=discord.AuditLogAction.ban, before=before, after=after)]
