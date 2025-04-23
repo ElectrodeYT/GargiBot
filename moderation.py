@@ -1,12 +1,19 @@
-from datetime import datetime, UTC
+from datetime import datetime, UTC, timezone
 from typing import Literal, List
 from dateutil.relativedelta import relativedelta
+from pathlib import Path
 
 import discord
+import os
 import db
 
 from discord.ext import commands
 from discord.ui import Button, View
+
+purge_logs_location = Path(os.environ.get('PURGE_LOGS_LOCATION', 'purge_logs/'))
+purge_logs_location.mkdir(parents=True, exist_ok=True)
+
+purge_logs_url_prepend = os.environ.get('PURGE_LOGS_URL_PREPEND')
 
 class ModerationCog(commands.Cog):
     def __init__(self, bot):
@@ -361,3 +368,40 @@ class ModerationCog(commands.Cog):
         current_time = datetime.now(UTC)
         view = self.BanStatsView(self.bot, ctx, current_time)
         await ctx.send(embed=await view.get_embed(), view=view)
+
+    @commands.hybrid_command(name='purge', description='Purge messages from this channel.')
+    @commands.has_permissions(manage_messages=True)
+    async def purge(self, ctx: commands.Context, amount: int = 10) -> None:
+        if amount <= 0:
+            await ctx.send('The amount of messages to purge must be positive.', ephemeral=True)
+            return
+
+        if ctx.guild is None:
+            await ctx.send('This command can only be used in a guild.', ephemeral=True)
+            return
+
+        list_of_deleted = await ctx.channel.purge(limit=amount + 1, bulk=True)
+
+        # Save the purge log.
+        file = purge_logs_location / f'{ctx.guild.name.lower().replace(' ', '-')}-' \
+                                     f'{ctx.channel.name.lower().replace(' ', '-')}-' \
+                                     f'{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.txt'
+
+        with open(file, 'a') as f:
+            f.write(f'Purged {len(list_of_deleted)} messages in {ctx.channel.name} ({ctx.guild.name})\n')
+            for message in list_of_deleted:
+                f.write(f'\t{message.author.name} - {message.created_at} - id: ({message.id})\n')
+                f.write(f'\t\t{message.content.replace('\n', '\n\t\t')}\n')
+            f.flush()
+
+        embed = discord.Embed(title='Purged messages', description=f'Deleted {len(list_of_deleted)} messages.')
+        await ctx.send(embed=embed)
+
+        # Log the purge
+        log_channel = db.get_guild_log_channel(ctx.guild)
+        if log_channel is not None:
+            embed = discord.Embed(title='Purged messages', description=f'Deleted {len(list_of_deleted)} messages in'
+                                                                       f'{ctx.channel.mention}.')
+            if purge_logs_url_prepend is not None:
+                embed.add_field(name='Log file', value=f'[Link]({purge_logs_url_prepend}{file.name})')
+            await log_channel.send(embed=embed)
