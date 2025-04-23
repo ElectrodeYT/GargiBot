@@ -78,7 +78,7 @@ class ModerationCog(commands.Cog):
 
     @commands.hybrid_command(name='ban', description='Ban a member from this guild.', aliases=['naenae'])
     @commands.has_permissions(ban_members=True)
-    async def ban(self, ctx: commands.Context, user_to_ban: discord.User | discord.Member, reason: str | None = None) -> None:
+    async def ban(self, ctx: commands.Context, user_to_ban: discord.User | discord.Member, *, reason: str | None = None) -> None:
         if ctx.guild is None:
             await ctx.send('This command can only be used in a guild.', ephemeral=True)
             return
@@ -105,7 +105,7 @@ class ModerationCog(commands.Cog):
 
     @commands.hybrid_command(name='kick', description='Kick a member from this guild.', aliases=['dabon'])
     @commands.has_permissions(kick_members=True)
-    async def kick(self, ctx: commands.Context, user_to_kick: discord.User | discord.Member, reason: str | None = None) -> None:
+    async def kick(self, ctx: commands.Context, user_to_kick: discord.User | discord.Member, *, reason: str | None = None) -> None:
         if ctx.guild is None:
             await ctx.send('This command can only be used in a guild.', ephemeral=True)
             return
@@ -131,7 +131,7 @@ class ModerationCog(commands.Cog):
 
     @commands.hybrid_command(name='unban', description='Unban a member from this guild.', aliases=['whip'])
     @commands.has_permissions(ban_members=True)
-    async def unban(self, ctx: commands.Context, user_to_unban: discord.User | discord.Member, reason: str | None = None) -> None:
+    async def unban(self, ctx: commands.Context, user_to_unban: discord.User | discord.Member, *, reason: str | None = None) -> None:
         if ctx.guild is None:
             await ctx.send('This command can only be used in a guild.', ephemeral=True)
             return
