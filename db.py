@@ -29,7 +29,7 @@ def init_guild(guild):
         return
 
     cur = sqlite_db.cursor()
-    cur.execute('INSERT INTO config(guild, log_channel) VALUES (?, ?)', (guild.id, 0))
+    cur.execute('INSERT INTO config(guild) VALUES (?)', (guild.id,))
     cur.close()
     sqlite_db.commit()
 

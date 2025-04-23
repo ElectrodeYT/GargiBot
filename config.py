@@ -16,11 +16,10 @@ class ConfigCog(commands.Cog):
     async def set_log_channel(self, interaction: discord.Interaction, channel: discord.TextChannel):
         print(f'Setting log channel to {channel.name} ({channel.id}) for '
               f'guild {interaction.guild.name} ({interaction.guild.id})')
-        cursor = db.config_db.cursor()
-        cursor.execute('INSERT OR REPLACE INTO config(guild, log_channel) VALUES (?, ?)',
-                       (interaction.guild.id, channel.id))
+        cursor = db.sqlite_db.cursor()
+        cursor.execute('UPDATE config SET log_channel = ? WHERE guild = ?', (channel.id, interaction.guild.id))
         cursor.close()
-        db.config_db.commit()
+        db.sqlite_db.commit()
 
         print(db.get_guild_log_channel(interaction.guild))
 
@@ -29,13 +28,11 @@ class ConfigCog(commands.Cog):
     @app_commands.command()
     @commands.has_permissions(administrator=True)
     async def disable_logging(self, interaction: discord.Interaction):
-        cursor = db.config_db.cursor()
-        cursor.execute('INSERT OR REPLACE INTO config(guild, log_channel) VALUES (?, ?)',
-                       (interaction.guild.id, 0))
+        cursor = db.sqlite_db.cursor()
+        cursor.execute('UPDATE config SET log_channel = NULL WHERE guild = ?', (interaction.guild.id,))
         cursor.close()
-        db.config_db.commit()
+        db.sqlite_db.commit()
         await interaction.response.send_message(f'Disabled logging')
-
 
     @app_commands.command()
     @commands.has_permissions(administrator=True)
@@ -56,5 +53,5 @@ class ConfigCog(commands.Cog):
             url='https://github.com/ElectrodeYT/GargiBot',
             colour=discord.Colour.blue()
         )
-        embed.set_image(url='https://raw.githubusercontent.com/ElectrodeYT/GargiBot/refs/heads/master/gargibot.gif')
+        embed.set_thumbnail(url='https://raw.githubusercontent.com/ElectrodeYT/GargiBot/refs/heads/master/gargibot.gif')
         await ctx.send(embed=embed)

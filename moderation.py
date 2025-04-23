@@ -309,6 +309,3 @@ class ModerationCog(commands.Cog):
         current_time = datetime.now(UTC)
         view = self.BanStatsView(self.bot, ctx, current_time)
         await ctx.send(embed=await view.get_embed(), view=view)
-
-
-
