@@ -5,8 +5,9 @@ from datetime import datetime, timezone
 from pprint import pprint
 
 sqlite_db = sqlite3.connect('gargibot.db')
-sqlite_db.execute('CREATE TABLE IF NOT EXISTS config(guild ID PRIMARY KEY, log_channel CHANNEL, ban_image_url STRING DEFAULT \'\','
-                  ' kick_image_url STRING DEFAULT \'\', unban_image_url STRING DEFAULT \'\' )')
+sqlite_db.execute('CREATE TABLE IF NOT EXISTS config(guild ID PRIMARY KEY, log_channel CHANNEL DEFAULT NULL, ban_image_url STRING DEFAULT NULL,'
+                  ' kick_image_url STRING DEFAULT NULL, unban_image_url STRING DEFAULT NULL, active_user_stat_channel CHANNEL DEFAULT NULL, '
+                  'total_users_stat_channel CHANNEL DEFAULT NULL)')
 sqlite_db.execute('CREATE TABLE IF NOT EXISTS messages(message_id ID NOT NULL PRIMARY KEY, contents STRING, '
                   'author_id ID NOT NULL, created_at TIMESTAMP NOT NULL)')
 sqlite_db.execute('CREATE TABLE IF NOT EXISTS ban_owners(guild ID, banned_user ID, responsible_mod ID, '
@@ -20,7 +21,7 @@ def guild_exists_in_config(guild):
     res = cursor.fetchone()
     cursor.close()
 
-    if res is None:
+    if res is None or res[0] == 0:
         return False
     return True
 
@@ -167,8 +168,10 @@ def set_image_url(guild: discord.Guild, image_url: str, type: str):
         raise ValueError('Invalid image type')
 
     cursor = sqlite_db.cursor()
-    cursor.execute(f'UPDATE config SET {type}_image_url = ? WHERE guild = ?',
-                   ('' if image_url is None else image_url, guild.id))
+    if image_url is not None:
+        cursor.execute(f'UPDATE config SET {type}_image_url = ? WHERE guild = ?', (image_url, guild.id))
+    else:
+        cursor.execute(f'UPDATE config SET {type}_image_url = NULL WHERE guild = ?', (guild.id,))
     cursor.close()
     sqlite_db.commit()
 

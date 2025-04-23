@@ -13,26 +13,32 @@ class ConfigCog(commands.Cog):
 
     @app_commands.command()
     @commands.has_permissions(administrator=True)
-    async def set_log_channel(self, interaction: discord.Interaction, channel: discord.TextChannel):
-        print(f'Setting log channel to {channel.name} ({channel.id}) for '
-              f'guild {interaction.guild.name} ({interaction.guild.id})')
+    @app_commands.describe(
+        type='The type of channel to set',
+        channel='The channel to set; don\'t pass to disable relevant feature'
+    )
+    async def set_channel(self, interaction: discord.Interaction, type: Literal['Log', 'Active Users', 'Total Users'],
+                          channel: discord.TextChannel | discord.VoiceChannel | None = None):
+        type_to_sql_column = {
+            'Log': 'log_channel',
+            'Active Users': 'active_user_stat_channel',
+            'Total Users': 'total_users_stat_channel'
+        }
+        assert type in type_to_sql_column, f'Invalid type: {type}'
+
         cursor = db.sqlite_db.cursor()
-        cursor.execute('UPDATE config SET log_channel = ? WHERE guild = ?', (channel.id, interaction.guild.id))
+        if channel is None:
+            cursor.execute('UPDATE config SET ' + type_to_sql_column[type] + ' = NULL WHERE guild = ?', (interaction.guild.id,))
+        else:
+            cursor.execute('UPDATE config SET ' + type_to_sql_column[type] + ' = ? WHERE guild = ?', (channel.id, interaction.guild.id))
+
         cursor.close()
         db.sqlite_db.commit()
 
-        print(db.get_guild_log_channel(interaction.guild))
-
-        await interaction.response.send_message(f'Successfully set log channel to {channel.name}')
-
-    @app_commands.command()
-    @commands.has_permissions(administrator=True)
-    async def disable_logging(self, interaction: discord.Interaction):
-        cursor = db.sqlite_db.cursor()
-        cursor.execute('UPDATE config SET log_channel = NULL WHERE guild = ?', (interaction.guild.id,))
-        cursor.close()
-        db.sqlite_db.commit()
-        await interaction.response.send_message(f'Disabled logging')
+        if channel is None:
+            await interaction.response.send_message(f'Successfully disabled {type} channel', ephemeral=True)
+        else:
+            await interaction.response.send_message(f'Successfully set {type} channel to {channel.mention}', ephemeral=True)
 
     @app_commands.command()
     @commands.has_permissions(administrator=True)
