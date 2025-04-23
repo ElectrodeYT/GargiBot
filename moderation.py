@@ -1,6 +1,6 @@
 from datetime import datetime, UTC
+from typing import Literal, List
 from dateutil.relativedelta import relativedelta
-from pprint import pprint
 
 import discord
 import db
@@ -12,7 +12,7 @@ class ModerationCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    def _create_success_embed(self, user_affected, type, guild: discord.Guild):
+    def _create_success_embed(self, user_affected: discord.User | discord.Member, type: str, guild: discord.Guild) -> discord.Embed:
         embed = discord.Embed()
         embed.title = f'Member {type}'
         embed.description = f'**{user_affected.name}** has been {type}.'
@@ -29,20 +29,22 @@ class ModerationCog(commands.Cog):
 
         return embed
 
-    def _create_text_embed(self, text):
+    def _create_text_embed(self, text: str) -> discord.Embed:
         embed = discord.Embed()
         embed.description = text
         return embed
 
-    def _create_log_embed(self, user_affected: discord.User, responsible_mod, reason, type):
+    def _create_log_embed(self, user_affected: discord.User | discord.Member,
+                          responsible_mod: discord.User | discord.Member, reason: str | None,
+                          log_type: str) -> discord.Embed:
         embed = discord.Embed()
-        embed.title = f'Member {type}'
+        embed.title = f'Member {log_type}'
 
-        if type == 'banned':
+        if log_type == 'banned':
             embed.colour = discord.Colour.red()
-        elif type == 'unbanned':
+        elif log_type == 'unbanned':
             embed.colour = discord.Colour.green()
-        elif type == 'kick':
+        elif log_type == 'kick':
             embed.colour = discord.Colour.yellow()
 
         embed.add_field(name='Member', value=f'{user_affected.mention} ({user_affected.name} - {user_affected.id})')
@@ -50,14 +52,15 @@ class ModerationCog(commands.Cog):
         embed.add_field(name='Reason', value='(none)' if reason is None else reason)
         return embed
 
-    async def _send_embed_to_log(self, guild: discord.Guild, embed):
+    async def _send_embed_to_log(self, guild: discord.Guild, embed: discord.Embed) -> None:
         log_channel = db.get_guild_log_channel(guild)
         if log_channel is None:
             return
 
         await log_channel.send(embed=embed)
 
-    async def _send_dm(self, user_affected: discord.User, guild: discord.Guild, action_type, reason: str | None = None) -> bool:
+    async def _send_dm(self, user_affected: discord.User | discord.Member, guild: discord.Guild, action_type: str,
+                       reason: str | None = None) -> bool:
         embed = discord.Embed()
         embed.title = f'You have been {action_type} from {guild.name}.'
         if reason is None:
@@ -75,7 +78,20 @@ class ModerationCog(commands.Cog):
 
     @commands.hybrid_command(name='ban', description='Ban a member from this guild.', aliases=['naenae'])
     @commands.has_permissions(ban_members=True)
-    async def ban(self, ctx: commands.Context, user_to_ban: discord.User, reason: str | None = None):
+    async def ban(self, ctx: commands.Context, user_to_ban: discord.User | discord.Member, reason: str | None = None) -> None:
+        if ctx.guild is None:
+            await ctx.send('This command can only be used in a guild.', ephemeral=True)
+            return
+
+        if user_to_ban.id == self.bot.user.id:
+            await ctx.send('You cannot ban me!', ephemeral=True)
+            return
+
+        if ctx.author is None:
+            await ctx.send('Somehow, the author of the command could not be determined; '
+                           'please report this bug to electrode!', ephemeral=True)
+            return
+
         print(f'Banning user {user_to_ban.name} (responsible mod: {ctx.author.name})')
         await self._send_dm(user_to_ban, action_type='banned', guild=ctx.guild, reason=reason)
 
@@ -83,26 +99,48 @@ class ModerationCog(commands.Cog):
         await ctx.guild.ban(user=user_to_ban, reason=f'By {ctx.author.name} - {reason}', delete_message_days=0)
         await ctx.send(embed=self._create_success_embed(user_affected=user_to_ban, type="banned", guild=ctx.guild))
         await self._send_embed_to_log(ctx.guild, self._create_log_embed(user_affected=user_to_ban,
-                                                                          responsible_mod=ctx.author,
-                                                                          reason=reason,
-                                                                          type='banned'))
+                                                                        responsible_mod=ctx.author,
+                                                                        reason=reason,
+                                                                        log_type='banned'))
 
     @commands.hybrid_command(name='kick', description='Kick a member from this guild.', aliases=['dabon'])
     @commands.has_permissions(kick_members=True)
-    async def kick(self, ctx: commands.Context, user_to_kick: discord.User, reason: str | None = None):
+    async def kick(self, ctx: commands.Context, user_to_kick: discord.User | discord.Member, reason: str | None = None) -> None:
+        if ctx.guild is None:
+            await ctx.send('This command can only be used in a guild.', ephemeral=True)
+            return
+
+        if user_to_kick.id == self.bot.user.id:
+            await ctx.send('You cannot kick me!', ephemeral=True)
+            return
+
+        if ctx.author is None:
+            await ctx.send('Somehow, the author of the command could not be determined; '
+                           'please report this bug to electrode!', ephemeral=True)
+            return
+
         print(f'Kicking user {user_to_kick.name} (responsible mod: {ctx.author.name})')
         await self._send_dm(user_to_kick, action_type='kicked', guild=ctx.guild, reason=reason)
 
         await ctx.guild.kick(user=user_to_kick, reason=reason)
         await ctx.send(embed=self._create_success_embed(user_affected=user_to_kick, type="kicked", guild=ctx.guild))
         await self._send_embed_to_log(ctx.guild, self._create_log_embed(user_affected=user_to_kick,
-                                                                          responsible_mod=ctx.author,
-                                                                          reason=reason,
-                                                                          type='kicked'))
+                                                                        responsible_mod=ctx.author,
+                                                                        reason=reason,
+                                                                        log_type='kicked'))
 
     @commands.hybrid_command(name='unban', description='Unban a member from this guild.', aliases=['whip'])
     @commands.has_permissions(ban_members=True)
-    async def unban(self, ctx: commands.Context, user_to_unban: discord.User, reason: str | None = None):
+    async def unban(self, ctx: commands.Context, user_to_unban: discord.User | discord.Member, reason: str | None = None) -> None:
+        if ctx.guild is None:
+            await ctx.send('This command can only be used in a guild.', ephemeral=True)
+            return
+
+        if ctx.author is None:
+            await ctx.send('Somehow, the author of the command could not be determined; '
+                           'please report this bug to electrode!', ephemeral=True)
+            return
+
         print(f'Unbanning user {user_to_unban.name} (responsible mod: {ctx.author.name})')
         try:
             await ctx.guild.unban(user=user_to_unban, reason=reason)
@@ -111,9 +149,9 @@ class ModerationCog(commands.Cog):
             return
         await ctx.send(embed=self._create_success_embed(user_affected=user_to_unban, type="unbanned", guild=ctx.guild))
         await self._send_embed_to_log(ctx.guild, self._create_log_embed(user_affected=user_to_unban,
-                                                                          responsible_mod=ctx.author,
-                                                                          reason=reason,
-                                                                          type='unbanned'))
+                                                                        responsible_mod=ctx.author,
+                                                                        reason=reason,
+                                                                        log_type='unbanned'))
 
     class BanStatsView(View):
         current_begin_of_month: datetime
@@ -169,7 +207,7 @@ class ModerationCog(commands.Cog):
             else:
                 await interaction.response.send_message("Cannot view future months!", ephemeral=True)
 
-        async def update_stats(self, interaction: discord.Interaction):
+        async def update_stats(self, interaction: discord.Interaction) -> None:
             # Get the beginning of this month
             assert self.current_begin_of_month.day == 1
 
@@ -179,6 +217,7 @@ class ModerationCog(commands.Cog):
             if end_of_month > datetime.now(UTC):
                 end_of_month = datetime.now(UTC)
 
+            assert interaction.guild is not None
             ban_stats = await self._get_banstats_between_dates(
                 guild=interaction.guild,
                 before=end_of_month,
@@ -190,7 +229,7 @@ class ModerationCog(commands.Cog):
 
             await interaction.response.edit_message(embed=ban_stats_embed, view=self)
 
-        def _banstats_to_embed(self, banstats: dict):
+        def _banstats_to_embed(self, banstats: dict) -> discord.Embed:
             embed = discord.Embed()
             embed.title = 'Ban stats'
             embed.colour = discord.Colour.green()
@@ -213,18 +252,23 @@ class ModerationCog(commands.Cog):
 
             return embed
 
-        def _add_before_after_to_banstats_embed(self, embed: discord.Embed, before: datetime, after: datetime):
+        def _add_before_after_to_banstats_embed(self, embed: discord.Embed, before: datetime, after: datetime) -> None:
             date_format_string = '%d. %b %Y'
             embed.set_footer(
                 text=f'Banstats between {after.strftime(date_format_string)} and {before.strftime(date_format_string)}')
 
-        def _get_audit_log_ban_in_db(self, audit_log_entry: discord.AuditLogEntry, database_saved_bans: []) -> ():
+        def _get_audit_log_ban_in_db(self, audit_log_entry: discord.AuditLogEntry,
+                                     database_saved_bans: List[db.SavedBan]) -> db.SavedBan | None:
+            assert audit_log_entry.target is not None
+            assert audit_log_entry.user is not None
+            assert audit_log_entry.created_at is not None
+
             debug_this = False
             if debug_this:
                 print(f'Trying to find ban in DB for {audit_log_entry.target.id} at {audit_log_entry.created_at} ({int(audit_log_entry.created_at.timestamp())}).')
 
             # Try to find a database ban here
-            current_top_db_entry = None
+            current_top_db_entry: db.SavedBan | None = None
             for db_ban_entry in database_saved_bans:
                 if debug_this:
                     print(f'-> Entry: {db_ban_entry.banned_user_id} - {int(db_ban_entry.banned_time.timestamp())}, '
@@ -251,7 +295,7 @@ class ModerationCog(commands.Cog):
 
             return current_top_db_entry
 
-        async def _get_banstats_between_dates(self, guild: discord.Guild, before: datetime, after: datetime) -> {}:
+        async def _get_banstats_between_dates(self, guild: discord.Guild, before: datetime, after: datetime) -> dict[int | str, int]:
             # Get the list of bans from audit log between the times
             audit_log_ban_entries = [entry async for entry in
                                      guild.audit_logs(action=discord.AuditLogAction.ban, before=before, after=after)]
@@ -260,10 +304,14 @@ class ModerationCog(commands.Cog):
             database_saved_bans = db.get_bans_between(guild, before, after)
 
             # The actual banstats themselves
-            ban_stats = {}
+            ban_stats: dict[int | str, int] = {}
 
             # We now iterate the audit log bans
             for audit_log_entry in audit_log_ban_entries:
+                assert audit_log_entry.target is not None
+                assert audit_log_entry.user is not None
+                assert audit_log_entry.created_at is not None
+
                 # Look up the ban in the DB
                 db_ban_entry = self._get_audit_log_ban_in_db(audit_log_entry, database_saved_bans)
 
@@ -275,7 +323,7 @@ class ModerationCog(commands.Cog):
                         ban_stats['untrackable'] += 1
                     continue
                 # If the ban was made by us, and we found a DB entry for it, increment the banstats for the moderator
-                elif audit_log_entry.user.id == self.bot.user.id:
+                elif db_ban_entry is not None and audit_log_entry.user.id == self.bot.user.id:
                     if db_ban_entry.responsible_mod_id not in ban_stats:
                         ban_stats[db_ban_entry.responsible_mod_id] = 1
                     else:
@@ -305,7 +353,11 @@ class ModerationCog(commands.Cog):
             return ban_stats
 
     @commands.hybrid_command(name='banstats', description='Get the amount of bans in the last month.')
-    async def banstats(self, ctx: commands.Context):
+    async def banstats(self, ctx: commands.Context[commands.Bot]) -> None:
+        if ctx.guild is None:
+            await ctx.send('This command can only be used in a guild.', ephemeral=True)
+            return
+
         current_time = datetime.now(UTC)
         view = self.BanStatsView(self.bot, ctx, current_time)
         await ctx.send(embed=await view.get_embed(), view=view)

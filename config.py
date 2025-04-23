@@ -1,6 +1,6 @@
 import discord
 
-from typing import Literal
+from typing import Literal, Optional
 
 from discord.ext import commands
 from discord import app_commands
@@ -18,7 +18,11 @@ class ConfigCog(commands.Cog):
         channel='The channel to set; don\'t pass to disable relevant feature'
     )
     async def set_channel(self, interaction: discord.Interaction, type: Literal['Log', 'Active Users', 'Total Users'],
-                          channel: discord.TextChannel | discord.VoiceChannel | None = None):
+                          channel: discord.TextChannel | discord.VoiceChannel | None = None) -> None:
+        if interaction.guild is None:
+            await interaction.response.send_message('This command can only be used in a guild!', ephemeral=True)
+            return
+
         type_to_sql_column = {
             'Log': 'log_channel',
             'Active Users': 'active_user_stat_channel',
@@ -43,7 +47,12 @@ class ConfigCog(commands.Cog):
     @app_commands.command()
     @commands.has_permissions(administrator=True)
     @app_commands.describe(type='The type of image to set', url='The URL of the image; leave empty to set to default.')
-    async def set_image_url(self, interaction: discord.Interaction, type: Literal['ban', 'unban', 'kick'], url: str = None):
+    async def set_image_url(self, interaction: discord.Interaction, type: Literal['ban', 'unban', 'kick'],
+                            url: Optional[str] = None) -> None:
+        if interaction.guild is None:
+            await interaction.response.send_message('This command can only be used in a guild!', ephemeral=True)
+            return
+
         db.set_image_url(interaction.guild, url, type)
         if url is not None:
             await interaction.response.send_message(f'Successfully set {type} image URL to {url}', ephemeral=True)
@@ -51,7 +60,7 @@ class ConfigCog(commands.Cog):
             await interaction.response.send_message(f'Successfully set {type} image URL to default', ephemeral=True)
 
     @commands.hybrid_command(name='about')
-    async def about(self, ctx: commands.Context):
+    async def about(self, ctx: commands.Context) -> None:
         embed = discord.Embed(
             title='GargiBot!',
             description='Open-source moderation discord bot\n'

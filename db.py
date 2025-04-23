@@ -1,5 +1,7 @@
 import sqlite3
 import os
+from typing import List
+
 import discord
 from datetime import datetime, timezone
 
@@ -20,6 +22,9 @@ sqlite_db.execute('CREATE TABLE IF NOT EXISTS total_user_count(guild ID, days_si
                   'PRIMARY KEY(guild, days_since_epoch))')
 sqlite_db.commit()
 
+last_sqlite_db_commit_for_user_activity = None
+last_sqlite_db_commit_for_total_user_count = None
+
 def guild_exists_in_config(guild):
     cursor = sqlite_db.cursor()
     cursor.execute('SELECT COUNT(*) FROM config WHERE guild = ?', (guild.id,))
@@ -39,7 +44,7 @@ def init_guild(guild):
     cur.close()
     sqlite_db.commit()
 
-def get_guild_log_channel(guild: discord.Guild) -> discord.TextChannel | None:
+def get_guild_log_channel(guild: discord.Guild) -> discord.TextChannel | discord.VoiceChannel | None:
     cursor = sqlite_db.cursor()
     cursor.execute('SELECT log_channel FROM config WHERE guild = ?', (guild.id,))
     res = cursor.fetchone()
@@ -48,9 +53,11 @@ def get_guild_log_channel(guild: discord.Guild) -> discord.TextChannel | None:
     if res is None or res == 0:
         return None
 
-    return guild.get_channel(res[0])
+    channel = guild.get_channel(res[0])
+    assert channel is None or isinstance(channel, discord.TextChannel) or isinstance(channel, discord.VoiceChannel)
+    return channel
 
-def get_guild_active_user_stat_channel(guild: discord.Guild) -> discord.abc.GuildChannel | None:
+def get_guild_active_user_stat_channel(guild: discord.Guild) -> discord.TextChannel | discord.VoiceChannel | None:
     cursor = sqlite_db.cursor()
     cursor.execute('SELECT active_user_stat_channel FROM config WHERE guild = ?', (guild.id,))
     res = cursor.fetchone()
@@ -58,9 +65,12 @@ def get_guild_active_user_stat_channel(guild: discord.Guild) -> discord.abc.Guil
 
     if res is None or res == 0:
         return None
-    return guild.get_channel(res[0])
 
-def get_guild_total_users_stat_channel(guild: discord.Guild) -> discord.abc.GuildChannel | None:
+    channel = guild.get_channel(res[0])
+    assert channel is None or isinstance(channel, discord.TextChannel) or isinstance(channel, discord.VoiceChannel)
+    return channel
+
+def get_guild_total_users_stat_channel(guild: discord.Guild) -> discord.TextChannel | discord.VoiceChannel | None:
     cursor = sqlite_db.cursor()
     cursor.execute('SELECT total_users_stat_channel FROM config WHERE guild = ?', (guild.id,))
     res = cursor.fetchone()
@@ -68,12 +78,15 @@ def get_guild_total_users_stat_channel(guild: discord.Guild) -> discord.abc.Guil
 
     if res is None or res == 0:
         return None
-    return guild.get_channel(res[0])
 
-def update_user_activity(guild: discord.Guild, user: discord.User | discord.Member):
-    global __last_sqlite_db_commit_for_user_activity
-    if '__last_sqlite_db_commit_for_user_activity' not in globals():
-        __last_sqlite_db_commit_for_user_activity = datetime.now(timezone.utc)
+    channel = guild.get_channel(res[0])
+    assert channel is None or isinstance(channel, discord.TextChannel) or isinstance(channel, discord.VoiceChannel)
+    return channel
+
+def update_user_activity(guild: discord.Guild, user: discord.User | discord.Member) -> None:
+    global last_sqlite_db_commit_for_user_activity
+    if last_sqlite_db_commit_for_user_activity is None:
+        last_sqlite_db_commit_for_user_activity = datetime.now(timezone.utc)
 
     # Store the current time we use for this for the 1 in a million chance that the day rolls over during the function
     current_time = datetime.now(timezone.utc)
@@ -96,11 +109,12 @@ def update_user_activity(guild: discord.Guild, user: discord.User | discord.Memb
     cursor.close()
 
     # We don't issue sqlite db commits for this too often, since this function will fire _very_ often
-    if (current_time - __last_sqlite_db_commit_for_user_activity).total_seconds() > 10:
-        __last_sqlite_db_commit_for_user_activity = current_time
+    assert last_sqlite_db_commit_for_user_activity is not None
+    if (current_time - last_sqlite_db_commit_for_user_activity).total_seconds() > 10:
+        last_sqlite_db_commit_for_user_activity = current_time
         sqlite_db.commit()
 
-def get_this_day_active_user_count(guild: discord.Guild):
+def get_this_day_active_user_count(guild: discord.Guild) -> int:
     cursor = sqlite_db.cursor()
     cursor.execute('SELECT COUNT(*) FROM user_activity WHERE guild = ? AND days_since_epoch = ?',
                    (guild.id, (datetime.now(timezone.utc) - datetime(1970, 1, 1, tzinfo=timezone.utc)).days))
@@ -111,7 +125,7 @@ def get_this_day_active_user_count(guild: discord.Guild):
         return 0
     return res[0]
 
-def get_last_day_active_user_count(guild: discord.Guild):
+def get_last_day_active_user_count(guild: discord.Guild) -> int:
     cursor = sqlite_db.cursor()
     cursor.execute('SELECT COUNT(*) FROM user_activity WHERE guild = ? AND days_since_epoch = ?',
                    (guild.id, (datetime.now(timezone.utc) - datetime(1970, 1, 1, tzinfo=timezone.utc)).days - 1))
@@ -122,10 +136,10 @@ def get_last_day_active_user_count(guild: discord.Guild):
         return 0
     return res[0]
 
-def update_total_user_count(guild: discord.Guild):
-    global __last_sqlite_db_commit_for_total_user_count
-    if '__last_sqlite_db_commit_for_total_user_count' not in globals():
-        __last_sqlite_db_commit_for_total_user_count = datetime.now(timezone.utc)
+def update_total_user_count(guild: discord.Guild) -> None:
+    global last_sqlite_db_commit_for_total_user_count
+    if last_sqlite_db_commit_for_total_user_count is None:
+        last_sqlite_db_commit_for_total_user_count = datetime.now(timezone.utc)
 
     cursor = sqlite_db.cursor()
     cursor.execute('SELECT COUNT(*) FROM total_user_count WHERE guild = ? AND days_since_epoch = ?',
@@ -147,8 +161,9 @@ def update_total_user_count(guild: discord.Guild):
 
     cursor.close()
     # We don't issue sqlite db commits for this too often, since this function will fire _very_ often
-    if (datetime.now(timezone.utc) - __last_sqlite_db_commit_for_total_user_count).total_seconds() > 10:
-        __last_sqlite_db_commit_for_total_user_count = datetime.now(timezone.utc)
+    assert last_sqlite_db_commit_for_total_user_count is not None
+    if (datetime.now(timezone.utc) - last_sqlite_db_commit_for_total_user_count).total_seconds() > 10:
+        last_sqlite_db_commit_for_total_user_count = datetime.now(timezone.utc)
         sqlite_db.commit()
 
 def get_last_day_total_user_count(guild: discord.Guild) -> int | None:
@@ -182,14 +197,14 @@ def get_message_from_db(message_id: int) -> LoggedMessage | None:
     return message
 
 
-def insert_message_into_db(message: discord.Message):
+def insert_message_into_db(message: discord.Message) -> None:
     cursor = sqlite_db.cursor()
     cursor.execute('INSERT OR REPLACE INTO messages(message_id, contents, author_id, created_at) VALUES (?, ?, ?, ?)',
                    (message.id, message.content, message.author.id, message.created_at.timestamp()))
     cursor.close()
     sqlite_db.commit()
 
-def delete_message_from_db(message_id: int):
+def delete_message_from_db(message_id: int) -> None:
     cursor = sqlite_db.cursor()
     cursor.execute('DELETE FROM messages WHERE message_id = ?', (message_id,))
     cursor.close()
@@ -205,14 +220,18 @@ class SavedBan:
                 f'banned_user_id={self.banned_user_id}, '
                 f'banned_time={int(self.banned_time.timestamp())})')
 
-def add_ban(guild: discord.Guild, responsible_mod: discord.User, banned_user: discord.User):
+def add_ban(guild: discord.Guild, responsible_mod: discord.User | discord.Member,
+            banned_user: discord.User | discord.Member) -> None:
     cursor = sqlite_db.cursor()
     cursor.execute('INSERT INTO ban_owners(guild, banned_user, responsible_mod, banned_time) VALUES (?, ?, ?, unixepoch(\'now\'))',
                    (guild.id, banned_user.id, responsible_mod.id))
     cursor.close()
     sqlite_db.commit()
 
-def add_audit_log_ban(guild: discord.Guild, audit_log_entry: discord.AuditLogEntry):
+def add_audit_log_ban(guild: discord.Guild, audit_log_entry: discord.AuditLogEntry) -> None:
+    assert isinstance(audit_log_entry, discord.AuditLogEntry)
+    assert type(audit_log_entry.target) == discord.User or type(audit_log_entry.target) == discord.Member
+    assert type(audit_log_entry.user) == discord.User or type(audit_log_entry.user) == discord.Member
     print(f'Adding audit log ban for {audit_log_entry.target.name} ({audit_log_entry.target.id}),'
           f' by {audit_log_entry.user.name} ({audit_log_entry.user.id})'
           f' guild {guild.name} ({guild.id}), '
@@ -224,18 +243,7 @@ def add_audit_log_ban(guild: discord.Guild, audit_log_entry: discord.AuditLogEnt
     cursor.close()
     sqlite_db.commit()
 
-def get_ban_owner(guild: discord.Guild, banned_user: discord.User, approx_time: datetime) -> discord.User | None:
-    cursor = sqlite_db.cursor()
-    cursor.execute('SELECT responsible_mod, banned_time FROM ban_owners WHERE guild=? and banned_user=?',
-                   (guild.id, banned_user.id))
-    results = cursor.fetchall()
-
-    # We now find the one with the closest approx ban time
-    pprint(results)
-
-    return None
-
-def get_bans_between(guild: discord.Guild, before: datetime, after: datetime) -> [SavedBan]:
+def get_bans_between(guild: discord.Guild, before: datetime, after: datetime) -> List[SavedBan]:
     cursor = sqlite_db.cursor()
     cursor.execute('SELECT banned_user, responsible_mod, banned_time FROM ban_owners WHERE guild=? AND banned_time BETWEEN ? and ?',
                    (guild.id, int(after.timestamp()), int(before.timestamp())))
@@ -279,7 +287,7 @@ def get_unban_image_url(guild: discord.Guild) -> str:
         return 'https://raw.githubusercontent.com/ElectrodeYT/GargiBot/refs/heads/master/gargibot.gif'
     return res[0]
 
-def set_image_url(guild: discord.Guild, image_url: str, type: str):
+def set_image_url(guild: discord.Guild, image_url: str | None, type: str) -> None:
     if type not in ['ban', 'kick', 'unban']:
         raise ValueError('Invalid image type')
 
@@ -291,7 +299,7 @@ def set_image_url(guild: discord.Guild, image_url: str, type: str):
     cursor.close()
     sqlite_db.commit()
 
-def set_guild_tag(guild: discord.Guild, tag_name, tag_content: str):
+def set_guild_tag(guild: discord.Guild, tag_name: str, tag_content: str) -> None:
     cursor = sqlite_db.cursor()
     cursor.execute('INSERT OR REPLACE INTO tags(guild, tag_name, tag_content) VALUES (?, ?, ?)',
                    (guild.id, tag_name, tag_content))
@@ -308,7 +316,7 @@ def get_guild_tag(guild: discord.Guild, tag_name: str) -> str | None:
         return None
     return res[0]
 
-def remove_guild_tag(guild: discord.Guild, tag_name: str):
+def remove_guild_tag(guild: discord.Guild, tag_name: str) -> None:
     cursor = sqlite_db.cursor()
     cursor.execute('DELETE FROM tags WHERE guild=? AND tag_name=?', (guild.id, tag_name))
     cursor.close()

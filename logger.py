@@ -9,9 +9,6 @@ from pprint import pprint
 import db
 
 class LoggerCog(commands.Cog):
-    currently_known_guild_activity_levels: {}
-    last_active_user_channel_update: {}
-
     def __init__(self, bot):
         self.bot = bot
         self.currently_known_guild_activity_levels = {}
@@ -45,8 +42,8 @@ class LoggerCog(commands.Cog):
                 if before_perm[1] != after_perm[1]:
                     embed.add_field(name=f'Permission: {after_perm[0]}', value=f'{before_perm[1]} -> {after_perm[1]}')
 
-    async def _handle_active_user_stat_change(self, guild: discord.Guild, member: discord.Member):
-        db.update_user_activity(guild, member)
+    async def _handle_active_user_stat_change(self, guild: discord.Guild, user: discord.User | discord.Member) -> None:
+        db.update_user_activity(guild, user)
 
         active_user_stat_channel = db.get_guild_active_user_stat_channel(guild)
         if active_user_stat_channel is None:
@@ -64,13 +61,14 @@ class LoggerCog(commands.Cog):
 
     # We also run this function every night at 1 minute past UTC midnight
     @tasks.loop(time=datetime.time(hour=0, minute=1, tzinfo=datetime.timezone.utc))
-    async def _handle_total_user_count_change(self, guild: discord.Guild):
+    async def _handle_total_user_count_change(self, guild: discord.Guild) -> None:
         db.update_total_user_count(guild)
 
         total_user_count_stat_channel = db.get_guild_total_users_stat_channel(guild)
         if total_user_count_stat_channel is None:
             return
 
+        assert guild.member_count is not None
         total_user_count = guild.member_count
         last_day_total_user_count = db.get_last_day_total_user_count(guild)
 
@@ -82,7 +80,7 @@ class LoggerCog(commands.Cog):
     #
 
     @commands.Cog.listener()
-    async def on_message(self, message: discord.Message):
+    async def on_message(self, message: discord.Message) -> None:
         # We await this at the end to try and multitask this stuff a bit more
         if message.guild is not None and message.author is not None and message.author.id != self.bot.user.id:
             stat_update_coroutine = self._handle_active_user_stat_change(message.guild, message.author)
@@ -92,7 +90,7 @@ class LoggerCog(commands.Cog):
             await stat_update_coroutine
 
     @commands.Cog.listener()
-    async def on_raw_message_delete(self, event: discord.RawMessageDeleteEvent):
+    async def on_raw_message_delete(self, event: discord.RawMessageDeleteEvent) -> None:
         guild = self.bot.get_guild(event.guild_id)
         log_channel = db.get_guild_log_channel(guild)
 
@@ -124,7 +122,11 @@ class LoggerCog(commands.Cog):
         await log_channel.send(embed=embed)
 
     @commands.Cog.listener()
-    async def on_message_edit(self, before: discord.Message, after: discord.Message):
+    async def on_message_edit(self, before: discord.Message, after: discord.Message) -> None:
+        if before.guild is None or before.author is None:
+            print(f'On message edit event with no guild/author? message: {dir(before)}')
+            return
+
         # Do not log when we edit our own messages
         if before.author.id == self.bot.user.id:
             return
@@ -148,7 +150,7 @@ class LoggerCog(commands.Cog):
     #
 
     @commands.Cog.listener()
-    async def on_member_join(self, member: discord.Member):
+    async def on_member_join(self, member: discord.Member) -> None:
         guild_total_member_count_update_coroutine = self._handle_total_user_count_change(member.guild)
         log_channel = db.get_guild_log_channel(member.guild)
 
@@ -166,7 +168,7 @@ class LoggerCog(commands.Cog):
         await guild_total_member_count_update_coroutine
 
     @commands.Cog.listener()
-    async def on_raw_member_remove(self, event: discord.RawMemberRemoveEvent):
+    async def on_raw_member_remove(self, event: discord.RawMemberRemoveEvent) -> None:
         guild = self.bot.get_guild(event.guild_id)
         guild_total_member_count_update_coroutine = self._handle_total_user_count_change(guild)
 
@@ -187,7 +189,7 @@ class LoggerCog(commands.Cog):
     # Member ban logic
     # Turns out, finding out exactly who banned who when banning through the bot is a bit funny, lol
     @commands.Cog.listener()
-    async def on_member_ban(self, guild: discord.Guild, user: discord.User | discord.Member):
+    async def on_member_ban(self, guild: discord.Guild, user: discord.User | discord.Member) -> None:
         log_channel = db.get_guild_log_channel(guild)
         if log_channel is None:
             return
@@ -197,7 +199,7 @@ class LoggerCog(commands.Cog):
         # Find the entry where this user was banned
         found_entry = None
         for entry in audit_log_entries:
-            if entry.target.id == user.id:
+            if entry.target is not None and entry.target.id == user.id:
                 found_entry = entry
                 break
 
@@ -205,7 +207,7 @@ class LoggerCog(commands.Cog):
         embed.title = 'Member banned'
         embed.colour = discord.Color.red()
         embed.add_field(name='Member', value=self._get_user_string(user))
-        if found_entry is not None:
+        if found_entry is not None and found_entry.user is not None:
             embed.add_field(name='Ban reason', value=found_entry.reason)
             responsible_mod = found_entry.user
             # If the responsible mod is the bot itself, then we dont log here, the log was written by the ban command
@@ -218,7 +220,7 @@ class LoggerCog(commands.Cog):
         await log_channel.send(embed=embed)
 
     async def _check_and_log_nick_update(self, before: discord.Member, after: discord.Member,
-                                          log_channel: discord.TextChannel):
+                                          log_channel: discord.TextChannel | discord.VoiceChannel) -> None:
         if before.nick != after.nick:
             embed = discord.Embed()
             embed.title = 'Nickname updated'
@@ -228,7 +230,7 @@ class LoggerCog(commands.Cog):
             await log_channel.send(embed=embed)
 
     async def _check_and_log_roles_update(self, before: discord.Member, after: discord.Member,
-                                           log_channel: discord.TextChannel):
+                                           log_channel: discord.TextChannel | discord.VoiceChannel) -> None:
         if before.roles != after.roles:
             embed = discord.Embed()
             embed.title = 'Roles updated'
@@ -240,7 +242,7 @@ class LoggerCog(commands.Cog):
             await log_channel.send(embed=embed)
 
     async def _check_and_log_timeout_update(self, before: discord.Member, after: discord.Member,
-                                             log_channel: discord.TextChannel):
+                                             log_channel: discord.TextChannel | discord.VoiceChannel) -> None:
         if before.timed_out_until != after.timed_out_until:
             embed = discord.Embed()
             embed.title = 'Timeout updated'
@@ -260,7 +262,7 @@ class LoggerCog(commands.Cog):
             await log_channel.send(embed=embed)
 
     async def _check_and_log_username_update(self, before: discord.User, after: discord.User,
-                                              log_channel: discord.TextChannel):
+                                              log_channel: discord.TextChannel | discord.VoiceChannel) -> None:
         if before.name != after.name:
             embed = discord.Embed()
             embed.title = 'Username updated'
@@ -270,7 +272,7 @@ class LoggerCog(commands.Cog):
             await log_channel.send(embed=embed)
 
     @commands.Cog.listener()
-    async def on_user_update(self, before: discord.User, after: discord.User):
+    async def on_user_update(self, before: discord.User, after: discord.User) -> None:
         for guild in after.mutual_guilds:
             log_channel = db.get_guild_log_channel(guild)
 
@@ -280,7 +282,7 @@ class LoggerCog(commands.Cog):
             await self._check_and_log_username_update(before, after, log_channel)
 
     @commands.Cog.listener()
-    async def on_member_update(self, before: discord.Member, after: discord.Member):
+    async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
         log_channel = db.get_guild_log_channel(after.guild)
 
         if log_channel is None:
@@ -295,7 +297,7 @@ class LoggerCog(commands.Cog):
     #
 
     @commands.Cog.listener()
-    async def on_guild_channel_create(self, channel: discord.abc.GuildChannel):
+    async def on_guild_channel_create(self, channel: discord.abc.GuildChannel) -> None:
         log_channel = db.get_guild_log_channel(channel.guild)
 
         if log_channel is None:
@@ -309,7 +311,7 @@ class LoggerCog(commands.Cog):
         await log_channel.send(embed=embed)
 
     @commands.Cog.listener()
-    async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel):
+    async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel) -> None:
         log_channel = db.get_guild_log_channel(channel.guild)
 
         if log_channel is None:
@@ -323,7 +325,7 @@ class LoggerCog(commands.Cog):
         await log_channel.send(embed=embed)
 
     @commands.Cog.listener()
-    async def on_guild_channel_update(self, before: discord.abc.GuildChannel, after: discord.abc.GuildChannel):
+    async def on_guild_channel_update(self, before: discord.abc.GuildChannel, after: discord.abc.GuildChannel) -> None:
         log_channel = db.get_guild_log_channel(after.guild)
 
         if log_channel is None:
@@ -339,7 +341,8 @@ class LoggerCog(commands.Cog):
 
         # Check if category changed
         if before.category != after.category:
-            embed.add_field(name='Category', value=f'{before.category.name} -> {after.category.name}')
+            embed.add_field(name='Category', value=f'{before.category.name if before.category is not None else '(none)'} '
+                                                   f'-> {after.category.name if after.category is not None else '(none)'}')
 
         # Check if position changed
         if before.position != after.position:
@@ -356,7 +359,7 @@ class LoggerCog(commands.Cog):
     #
 
     @commands.Cog.listener()
-    async def on_guild_role_create(self, role: discord.Role):
+    async def on_guild_role_create(self, role: discord.Role) -> None:
         log_channel = db.get_guild_log_channel(role.guild)
 
         if log_channel is None:
@@ -368,7 +371,7 @@ class LoggerCog(commands.Cog):
         await log_channel.send(embed=embed)
 
     @commands.Cog.listener()
-    async def on_guild_role_delete(self, role: discord.Role):
+    async def on_guild_role_delete(self, role: discord.Role) -> None:
         log_channel = db.get_guild_log_channel(role.guild)
 
         if log_channel is None:
@@ -380,7 +383,7 @@ class LoggerCog(commands.Cog):
         await log_channel.send(embed=embed)
 
     @commands.Cog.listener()
-    async def on_guild_role_update(self, before: discord.Role, after: discord.Role):
+    async def on_guild_role_update(self, before: discord.Role, after: discord.Role) -> None:
         log_channel = db.get_guild_log_channel(after.guild)
 
         if log_channel is None:
@@ -403,7 +406,8 @@ class LoggerCog(commands.Cog):
     #
 
     @commands.Cog.listener()
-    async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
+    async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState,
+                                    after: discord.VoiceState) -> None:
         log_channel = db.get_guild_log_channel(member.guild)
 
         if log_channel is None:
