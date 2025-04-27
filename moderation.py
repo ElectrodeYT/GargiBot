@@ -513,3 +513,30 @@ class ModerationCog(commands.Cog):
             if purge_logs_url_prepend is not None:
                 embed.add_field(name='Log file', value=f'[Link]({purge_logs_url_prepend}{file.name})')
             await log_channel.send(embed=embed)
+
+    @commands.hybrid_command(name='info', description='Get information about a user.')
+    @app_commands.describe(user='The user to get information about.')
+    async def info(self, ctx: commands.Context, user: discord.Member) -> None:
+        if ctx.guild is None:
+            await ctx.send('This command can only be used in a guild.', ephemeral=True)
+            return
+
+        if user.id == self.bot.user.id:
+            await ctx.send('I am a bot!', ephemeral=True)
+
+        embed = discord.Embed(title=f'Info for {user.name}',
+                              description=f'{'AKA: {user.nick}, ' if user.nick is not None else ''}ID: {user.id}')
+        embed.set_thumbnail(url=user.display_avatar.url)
+
+        if type(user.status) is not str:
+            embed.add_field(name='Overall Status', value=user.status, inline=False)
+            embed.add_field(name='Desktop Status', value=user.desktop_status)
+            embed.add_field(name='Mobile Status', value=user.mobile_status)
+            embed.add_field(name='Web Status', value=user.web_status)
+
+        embed.add_field(name='Created at', value=f'<t:{int(user.created_at.timestamp())}:f>', inline=False)
+        embed.add_field(name='Joined at', value=f'<t:{int(user.joined_at.timestamp())}:f>', inline=False)
+
+        embed.add_field(name='Seen on', value='\n'.join([guild.name for guild in user.mutual_guilds]), inline=False)
+
+        await ctx.send(embed=embed)
