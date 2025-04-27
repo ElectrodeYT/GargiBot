@@ -296,6 +296,18 @@ class LoggerCog(commands.Cog):
     # Channels
     #
 
+    async def _is_ignored_channel(self, channel: discord.abc.GuildChannel, guild: discord.Guild) -> bool:
+        log_channel = db.get_guild_log_channel(guild)
+        if log_channel is not None and channel.id == log_channel.id:
+            return True
+        total_user_count_stat_channel = db.get_guild_total_users_stat_channel(guild)
+        if total_user_count_stat_channel is not None and channel.id == total_user_count_stat_channel.id:
+            return True
+        active_user_stat_channel = db.get_guild_active_user_stat_channel(guild)
+        if active_user_stat_channel is not None and channel.id == active_user_stat_channel.id:
+            return True
+        return False
+
     @commands.Cog.listener()
     async def on_guild_channel_create(self, channel: discord.abc.GuildChannel) -> None:
         log_channel = db.get_guild_log_channel(channel.guild)
@@ -328,7 +340,7 @@ class LoggerCog(commands.Cog):
     async def on_guild_channel_update(self, before: discord.abc.GuildChannel, after: discord.abc.GuildChannel) -> None:
         log_channel = db.get_guild_log_channel(after.guild)
 
-        if log_channel is None:
+        if log_channel is None or await self._is_ignored_channel(after, after.guild) is True:
             return
 
         embed = discord.Embed()
