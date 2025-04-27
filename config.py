@@ -12,7 +12,7 @@ class ConfigCog(commands.Cog):
         self.bot = bot
 
     @app_commands.command()
-    @commands.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(administrator=True)
     @app_commands.describe(
         type='The type of channel to set',
         channel='The channel to set; don\'t pass to disable relevant feature'
@@ -45,7 +45,7 @@ class ConfigCog(commands.Cog):
             await interaction.response.send_message(f'Successfully set {type} channel to {channel.mention}', ephemeral=True)
 
     @app_commands.command()
-    @commands.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(administrator=True)
     @app_commands.describe(type='The type of image to set', url='The URL of the image; leave empty to set to default.')
     async def set_image_url(self, interaction: discord.Interaction, type: Literal['ban', 'unban', 'kick'],
                             url: Optional[str] = None) -> None:

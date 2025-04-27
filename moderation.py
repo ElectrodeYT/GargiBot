@@ -10,6 +10,7 @@ from pytimeparse.timeparse import timeparse
 
 from discord.ext import commands
 from discord.ui import Button, View
+from discord import app_commands
 
 purge_logs_location = Path(os.environ.get('PURGE_LOGS_LOCATION', 'purge_logs/'))
 purge_logs_location.mkdir(parents=True, exist_ok=True)
@@ -88,6 +89,7 @@ class ModerationCog(commands.Cog):
 
     @commands.hybrid_command(name='ban', description='Ban a member from this guild.', aliases=['naenae'])
     @commands.has_permissions(ban_members=True)
+    @app_commands.describe(user_to_ban='The user to ban.', reason='The reason for the ban.')
     async def ban(self, ctx: commands.Context, user_to_ban: discord.User | discord.Member, *,
                   reason: str | None = None) -> None:
         if ctx.guild is None:
@@ -116,6 +118,7 @@ class ModerationCog(commands.Cog):
 
     @commands.hybrid_command(name='kick', description='Kick a member from this guild.', aliases=['dabon'])
     @commands.has_permissions(kick_members=True)
+    @app_commands.describe(user_to_kick='The user to kick.', reason='The reason for the kick.')
     async def kick(self, ctx: commands.Context, user_to_kick: discord.User | discord.Member, *,
                    reason: str | None = None) -> None:
         if ctx.guild is None:
@@ -143,6 +146,7 @@ class ModerationCog(commands.Cog):
 
     @commands.hybrid_command(name='unban', description='Unban a member from this guild.', aliases=['whip'])
     @commands.has_permissions(ban_members=True)
+    @app_commands.describe(user_to_unban='The user to unban.', reason='The reason for the unban.')
     async def unban(self, ctx: commands.Context, user_to_unban: discord.User | discord.Member, *,
                     reason: str | None = None) -> None:
         if ctx.guild is None:
@@ -168,6 +172,9 @@ class ModerationCog(commands.Cog):
 
     @commands.hybrid_command(name='mute', description='Mute a member from this guild.', aliases=['shush', 'timeout'])
     @commands.has_permissions(kick_members=True)
+    @app_commands.describe(user_to_mute='The user to mute.',
+                           time='The time to mute for; leave empty for as long as possible',
+                           reason='The reason for the mute.')
     async def mute(self, ctx: commands.Context, user_to_mute: discord.Member, time: str | None = None, *,
                    reason: str | None = None) -> None:
         if ctx.guild is None:
@@ -228,6 +235,7 @@ class ModerationCog(commands.Cog):
 
     @commands.hybrid_command(name='unmute', description='Unmute a member from this guild.', aliases=['unshush'])
     @commands.has_permissions(kick_members=True)
+    @app_commands.describe(user_to_unmute='The user to unmute.')
     async def unmute(self, ctx: commands.Context, user_to_unmute: discord.Member) -> None:
         if ctx.guild is None:
             await ctx.send('This command can only be used in a guild.', ephemeral=True)
@@ -470,6 +478,7 @@ class ModerationCog(commands.Cog):
 
     @commands.hybrid_command(name='purge', description='Purge messages from this channel.')
     @commands.has_permissions(manage_messages=True)
+    @app_commands.describe(amount='The amount of messages to purge.')
     async def purge(self, ctx: commands.Context, amount: int = 10) -> None:
         if amount <= 0:
             await ctx.send('The amount of messages to purge must be positive.', ephemeral=True)

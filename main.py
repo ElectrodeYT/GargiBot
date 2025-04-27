@@ -94,7 +94,7 @@ class Bot(commands.Bot):
 
         async def send_err_embed(description: str) -> None:
             embed = discord.Embed(description=description, colour=discord.Colour.red())
-            await ctx.send(embed=embed)
+            await ctx.send(embed=embed, ephemeral=True)
 
         await command_error_handler_impl(send_err_embed, error)
 
