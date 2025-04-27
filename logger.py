@@ -58,9 +58,12 @@ class LoggerCog(commands.Cog):
                 await active_user_stat_channel.edit(name=f'Active Today: {active_user_count} ({active_user_count - last_day_active_user_count})')
                 print(f'Active user count updated for guild {guild.id} to {active_user_count}')
 
-
     # We also run this function every night at 1 minute past UTC midnight
     @tasks.loop(time=datetime.time(hour=0, minute=1, tzinfo=datetime.timezone.utc))
+    async def do_total_user_count_update_globally(self):
+        for guild in self.bot.guilds:
+            await self._handle_total_user_count_change(guild)
+
     async def _handle_total_user_count_change(self, guild: discord.Guild) -> None:
         db.update_total_user_count(guild)
 
