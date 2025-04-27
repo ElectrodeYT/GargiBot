@@ -13,6 +13,7 @@ class LoggerCog(commands.Cog):
         self.bot = bot
         self.currently_known_guild_activity_levels = {}
         self.last_active_user_channel_update = {}
+        self.do_total_user_count_update_globally.start()
 
     def _get_user_string(self, user: discord.User | discord.Member) -> str:
         return f'{user.mention} ({user.name} - {user.id})'
@@ -61,6 +62,7 @@ class LoggerCog(commands.Cog):
     # We also run this function every night at 1 minute past UTC midnight
     @tasks.loop(time=datetime.time(hour=0, minute=1, tzinfo=datetime.timezone.utc))
     async def do_total_user_count_update_globally(self):
+        print('Updating total user count globally')
         for guild in self.bot.guilds:
             await self._handle_total_user_count_change(guild)
 
