@@ -10,6 +10,7 @@ import db
 import logger
 import moderation
 import tags
+import antispam
 
 # Read token enviroment variable
 token = os.environ["BOT_TOKEN"]
@@ -86,6 +87,7 @@ class Bot(commands.Bot):
             await self.add_cog(logger.LoggerCog(bot))
             await self.add_cog(moderation.ModerationCog(bot))
             await self.add_cog(tags.TagCog(bot))
+            await self.add_cog(antispam.AntiSpamCog(bot))
             added_cogs = True
         self.loop.create_task(self.startup())
 
