@@ -12,6 +12,8 @@ from discord.ext import commands
 from discord.ui import Button, View
 from discord import app_commands
 
+from common_helpers import get_formatted_user_string
+
 purge_logs_location = Path(os.environ.get('PURGE_LOGS_LOCATION', 'purge_logs/'))
 purge_logs_location.mkdir(parents=True, exist_ok=True)
 
@@ -58,7 +60,7 @@ class ModerationCog(commands.Cog):
         elif log_type == 'kick':
             embed.colour = discord.Colour.yellow()
 
-        embed.add_field(name='Member', value=f'{user_affected.mention} ({user_affected.name} - {user_affected.id})')
+        embed.add_field(name='Member', value=f'{get_formatted_user_string(user_affected)})')
         embed.add_field(name='Responsible Moderator', value=responsible_mod)
         embed.add_field(name='Reason', value='(none)' if reason is None else reason)
         return embed
