@@ -104,7 +104,7 @@ class LoggerCog(commands.Cog):
         if event.cached_message is not None:
             message = event.cached_message
             embed.title = 'Message deleted'
-            embed.description = (f'By {get_formatted_user_string(message.author)})\n'
+            embed.description = (f'By {get_formatted_user_string(message.author)}) in {message.channel.mention}\n'
                                  f'```\n{message.content}\n```')
         else:
             # See if we can get the message from DB
@@ -112,7 +112,7 @@ class LoggerCog(commands.Cog):
             if logged_message is None:
                 embed.title = 'Message deleted'
                 embed.description = (f'Message ID: {event.message_id}\n'
-                                     f'Message not in cache, and therefore can not be logged!')
+                                     f'Message not in cache or DB, and therefore can not be logged!')
             else:
                 embed.title = 'Message deleted'
                 embed.description = (f'Message ID: {event.message_id}\n'
@@ -144,6 +144,7 @@ class LoggerCog(commands.Cog):
         # If the message is cached, use that to get the old content, else, check the DB
         if event.cached_message is not None:
             old_content = event.cached_message.content
+            embed.description += f' in {event.cached_message.channel.mention}'
         else:
             logged_message = db.get_message_from_db(event.message_id)
             if logged_message is not None:
