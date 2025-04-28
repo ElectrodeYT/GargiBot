@@ -70,3 +70,9 @@ class ConfigCog(commands.Cog):
         )
         embed.set_thumbnail(url='https://raw.githubusercontent.com/ElectrodeYT/GargiBot/refs/heads/master/gargibot.gif')
         await ctx.send(embed=embed)
+
+    @commands.hybrid_command(name='ping')
+    async def ping(self, ctx: commands.Context) -> None:
+        embed = discord.Embed(title='Pong!', colour=discord.Colour.blue())
+        embed.description = f'Latency: {round(self.bot.latency * 1000)}ms'
+        await ctx.send(embed=embed)
