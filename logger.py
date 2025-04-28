@@ -124,28 +124,43 @@ class LoggerCog(commands.Cog):
         await log_channel.send(embed=embed)
 
     @commands.Cog.listener()
-    async def on_message_edit(self, before: discord.Message, after: discord.Message) -> None:
-        if before.guild is None or before.author is None:
-            print(f'On message edit event with no guild/author? message: {dir(before)}')
+    async def on_raw_message_edit(self, event: discord.RawMessageUpdateEvent) -> None:
+        # Do not log our own message edits
+        if event.message.author.id == self.bot.user.id:
             return
 
-        # Do not log when we edit our own messages
-        if before.author.id == self.bot.user.id:
-            return
-
-        log_channel = db.get_guild_log_channel(before.guild)
+        guild = self.bot.get_guild(event.guild_id)
+        log_channel = db.get_guild_log_channel(guild)
 
         if log_channel is None:
             return
 
         embed = discord.Embed()
         embed.title = 'Message edited'
-        embed.description = (f'Message edited by {get_formatted_user_string(after.author)})\n'
-                             f'```\n{before.content}\n```\n->'
-                             f'```\n{after.content}\n```\n')
+        embed.description = f'Message edited by {get_formatted_user_string(event.message.author)})'
+
+        old_content: str | None = None
+
+        # If the message is cached, use that to get the old content, else, check the DB
+        if event.cached_message is not None:
+            old_content = event.cached_message.content
+        else:
+            logged_message = db.get_message_from_db(event.message_id)
+            if logged_message is not None:
+                old_content = logged_message.contents
+                embed.set_footer(text='Message found in DB, but not in cache when message edited; '
+                                      'old version of message may not be the most recent previous '
+                                      'version')
+
+        if old_content is not None:
+            embed.add_field(name='Old message', value=f'```\n{old_content}\n```')
+        else:
+            embed.set_footer(text='Message not found in cache or DB; change can not be logged')
+
+        embed.add_field(name='New message', value=f'```\n{event.data["content"]}\n```')
 
         await log_channel.send(embed=embed)
-        db.insert_message_into_db(after)
+        db.insert_message_into_db(event.message)
 
     #
     # Members and Users
