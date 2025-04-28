@@ -438,8 +438,9 @@ class ModerationCog(commands.Cog):
                     else:
                         ban_stats['untrackable'] += 1
                     continue
-                # If the ban was made by us, and we found a DB entry for it, increment the banstats for the moderator
-                elif db_ban_entry is not None and audit_log_entry.user.id == self.bot.user.id:
+                # If we found a DB entry for the ban, increment the banstats for the moderator listed
+                # This makes importing banstats from other bots a bit more doable:tm:
+                elif db_ban_entry is not None:
                     if db_ban_entry.responsible_mod_id not in ban_stats:
                         ban_stats[db_ban_entry.responsible_mod_id] = 1
                     else:
