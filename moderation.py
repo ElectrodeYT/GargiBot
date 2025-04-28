@@ -528,7 +528,7 @@ class ModerationCog(commands.Cog):
             await ctx.send('I am a bot!', ephemeral=True)
 
         embed = discord.Embed(title=f'Info for {user.name}',
-                              description=f'{'AKA: {user.nick}, ' if user.nick is not None else ''}ID: {user.id}')
+                              description=f'{f'AKA: {user.nick}, ' if user.nick is not None else ''}ID: {user.id}')
         embed.set_thumbnail(url=user.display_avatar.url)
 
         if type(user.status) is not str:
