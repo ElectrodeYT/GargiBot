@@ -467,7 +467,7 @@ class ModerationCog(commands.Cog):
                 else:
                     ban_stats[db_ban_entry.responsible_mod_id] += 1
 
-            return ban_stats
+            return {k: v for k, v in sorted(ban_stats.items(), key=lambda item: item[1], reverse=True)}
 
     @commands.hybrid_command(name='banstats', description='Get the amount of bans in the last month.')
     async def banstats(self, ctx: commands.Context[commands.Bot]) -> None:
