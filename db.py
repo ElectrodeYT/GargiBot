@@ -265,7 +265,7 @@ def get_ban_image_url(guild: discord.Guild) -> str:
     cursor.execute('SELECT ban_image_url FROM config WHERE guild = ?', (guild.id,))
     res = cursor.fetchone()
     cursor.close()
-    if res is None or res[0] == '':
+    if res is None or res[0] == '' or res[0] is None:
         return 'https://raw.githubusercontent.com/ElectrodeYT/GargiBot/refs/heads/master/gargibot.gif'
     return res[0]
 
@@ -274,7 +274,7 @@ def get_kick_image_url(guild: discord.Guild) -> str:
     cursor.execute('SELECT kick_image_url FROM config WHERE guild = ?', (guild.id,))
     res = cursor.fetchone()
     cursor.close()
-    if res is None or res[0] == '':
+    if res is None or res[0] == '' or res[0] is None:
         return 'https://raw.githubusercontent.com/ElectrodeYT/GargiBot/refs/heads/master/gargibot.gif'
     return res[0]
 
@@ -283,7 +283,7 @@ def get_unban_image_url(guild: discord.Guild) -> str:
     cursor.execute('SELECT unban_image_url FROM config WHERE guild = ?', (guild.id,))
     res = cursor.fetchone()
     cursor.close()
-    if res is None or res[0] == '':
+    if res is None or res[0] == '' or res[0] is None:
         return 'https://raw.githubusercontent.com/ElectrodeYT/GargiBot/refs/heads/master/gargibot.gif'
     return res[0]
 
