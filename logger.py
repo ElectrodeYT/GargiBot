@@ -153,6 +153,13 @@ class LoggerCog(commands.Cog):
                                       'old version of message may not be the most recent previous '
                                       'version')
 
+        # If the old and new content is the same, this likely was a embed-only edit; we can and should ignore this.
+        if old_content is not None and old_content == event.message.content:
+            return
+
+        # Update the message in the DB
+        db.insert_message_into_db(event.message)
+
         if old_content is not None:
             embed.add_field(name='Old message', value=f'```\n{old_content}\n```')
         else:
@@ -161,7 +168,6 @@ class LoggerCog(commands.Cog):
         embed.add_field(name='New message', value=f'```\n{event.data["content"]}\n```')
 
         await log_channel.send(embed=embed)
-        db.insert_message_into_db(event.message)
 
     #
     # Members and Users
