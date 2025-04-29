@@ -137,14 +137,14 @@ class LoggerCog(commands.Cog):
 
         embed = discord.Embed()
         embed.title = 'Message edited'
-        embed.description = f'Message edited by {get_formatted_user_string(event.message.author)})'
+        embed.description = (f'Message edited by {get_formatted_user_string(event.message.author)}) '
+                             f'in {event.message.channel.mention} ([link]({event.message.jump_url}))')
 
         old_content: str | None = None
 
         # If the message is cached, use that to get the old content, else, check the DB
         if event.cached_message is not None:
             old_content = event.cached_message.content
-            embed.description += f' in {event.cached_message.channel.mention}'
         else:
             logged_message = db.get_message_from_db(event.message_id)
             if logged_message is not None:
