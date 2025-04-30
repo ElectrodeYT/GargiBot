@@ -185,6 +185,7 @@ class ModerationCog(commands.Cog):
 
         if user_to_mute.id == self.bot.user.id:
             await ctx.send('You cannot mute me!', ephemeral=True)
+            return
 
         if ctx.author is None:
             await ctx.send('Somehow, the author of the command could not be determined; '
@@ -245,6 +246,7 @@ class ModerationCog(commands.Cog):
 
         if user_to_unmute.id == self.bot.user.id:
             await ctx.send('You cannot unmute me!', ephemeral=True)
+            return
 
         if ctx.author is None:
             await ctx.send('Somehow, the author of the command could not be determined; '
@@ -526,6 +528,7 @@ class ModerationCog(commands.Cog):
 
         if user.id == self.bot.user.id:
             await ctx.send('I am a bot!', ephemeral=True)
+            return
 
         embed = discord.Embed(title=f'Info for {user.name}',
                               description=f'{f'AKA: {user.nick}, ' if user.nick is not None else ''}ID: {user.id}')
