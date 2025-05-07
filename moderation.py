@@ -349,11 +349,15 @@ class ModerationCog(commands.Cog):
             embed.title = 'Ban stats'
             embed.colour = discord.Colour.green()
 
+            total_bans = 0
+
             if len(banstats.keys()) == 0:
                 embed.description = 'No (known) bans in the time period'
             else:
                 descriptions = []
                 for mod in banstats.keys():
+                    total_bans += banstats[mod]
+
                     if mod == 'untrackable':
                         embed.add_field(name='Untrackable bans', value=banstats[mod], inline=False)
                         continue
@@ -364,6 +368,9 @@ class ModerationCog(commands.Cog):
                     descriptions.append(f'{user_name} - {banstats[mod]} ban{"s" if banstats[mod] > 1 else ""}')
 
                 embed.description = '\n'.join(descriptions)
+
+            if total_bans != 0:
+                embed.add_field(name='Total bans', value=str(total_bans), inline=False)
 
             return embed
 
