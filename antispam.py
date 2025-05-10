@@ -77,7 +77,9 @@ class GuildAntispamEngine:
                 except discord.errors.Forbidden:
                     # We can not mute this user, ignore
                     pass
-
+        elif message.author.id in self.users_sus_count:
+            if self.users_sus_count[message.author.id] > 0:
+                self.users_sus_count[message.author.id] -= 1
 
 
 class AntiSpamCog(commands.Cog):
