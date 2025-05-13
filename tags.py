@@ -70,6 +70,8 @@ class TagCog(commands.Cog):
         else:
             await ctx.send(embed=self._create_tag_embed(tag_name, tag_contents))
 
+    # Good enough for now
+    @app_commands.checks.has_permissions(kick_members=True)
     @app_commands.command()
     async def set_tag(self, interaction: discord.Interaction, tag_name: str, tag_content: str) -> None:
         if interaction.guild is None:
@@ -83,6 +85,8 @@ class TagCog(commands.Cog):
         db.set_guild_tag(interaction.guild, tag_name, tag_content)
         await interaction.response.send_message(f'Successfully set tag `{tag_name}`')
 
+    # Good enough for now
+    @app_commands.checks.has_permissions(kick_members=True)
     @app_commands.command()
     async def delete_tag(self, interaction: discord.Interaction, tag_name: str) -> None:
         if interaction.guild is None:
