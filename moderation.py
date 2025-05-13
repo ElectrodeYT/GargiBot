@@ -36,7 +36,7 @@ class ModerationCog(commands.Cog):
         elif type == 'unbanned':
             embed.colour = discord.Colour.green()
             embed.set_thumbnail(url=db.get_unban_image_url(guild))
-        elif type == 'kick':
+        elif type == 'kicked':
             embed.colour = discord.Colour.yellow()
             embed.set_thumbnail(url=db.get_kick_image_url(guild))
 
@@ -72,10 +72,10 @@ class ModerationCog(commands.Cog):
 
         await log_channel.send(embed=embed)
 
-    async def _send_dm(self, user_affected: discord.User | discord.Member, guild: discord.Guild, action_type: str,
+    async def _send_dm(self, user_affected: discord.User | discord.Member, action_type: str, ctx: commands.Context,
                        reason: str | None = None) -> bool:
         embed = discord.Embed()
-        embed.title = f'You have been {action_type} from {guild.name}.'
+        embed.title = f'You have been {action_type} from {ctx.guild.name}.'
         if reason is None:
             embed.description = f'You have been {action_type}.'
         else:
@@ -83,6 +83,11 @@ class ModerationCog(commands.Cog):
         try:
             await user_affected.send(embed=embed)
         except discord.Forbidden:
+            fail_embed = discord.Embed()
+            fail_embed.title = f'Failed to send DM to {user_affected.name}!'
+            fail_embed.description = f'Normally this means that the user has their DMs closed.'
+            await ctx.send(embed=fail_embed)
+            print(f'Failed to send DM to {user_affected.name} with Forbidden!')
             return False
         except discord.HTTPException:
             print(f'Failed to send DM to {user_affected.name} with HTTPException!')
@@ -108,7 +113,7 @@ class ModerationCog(commands.Cog):
             return
 
         print(f'Banning user {user_to_ban.name} (responsible mod: {ctx.author.name})')
-        await self._send_dm(user_to_ban, action_type='banned', guild=ctx.guild, reason=reason)
+        await self._send_dm(user_to_ban, action_type='banned', reason=reason, ctx=ctx)
 
         db.add_ban(ctx.guild, banned_user=user_to_ban, responsible_mod=ctx.author)
         await ctx.guild.ban(user=user_to_ban, reason=f'By {ctx.author.name} - {reason}', delete_message_days=0)
@@ -137,7 +142,7 @@ class ModerationCog(commands.Cog):
             return
 
         print(f'Kicking user {user_to_kick.name} (responsible mod: {ctx.author.name})')
-        await self._send_dm(user_to_kick, action_type='kicked', guild=ctx.guild, reason=reason)
+        await self._send_dm(user_to_kick, action_type='kicked', reason=reason, ctx=ctx)
 
         await ctx.guild.kick(user=user_to_kick, reason=reason)
         await ctx.send(embed=self._create_success_embed(user_affected=user_to_kick, type="kicked", guild=ctx.guild))
