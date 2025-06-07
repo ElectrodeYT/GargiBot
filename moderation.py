@@ -115,8 +115,8 @@ class ModerationCog(commands.Cog):
         print(f'Banning user {user_to_ban.name} (responsible mod: {ctx.author.name})')
         await self._send_dm(user_to_ban, action_type='banned', reason=reason, ctx=ctx)
 
-        db.add_ban(ctx.guild, banned_user=user_to_ban, responsible_mod=ctx.author)
         await ctx.guild.ban(user=user_to_ban, reason=f'By {ctx.author.name} - {reason}', delete_message_days=0)
+        db.add_ban(ctx.guild, banned_user=user_to_ban, responsible_mod=ctx.author)
         await ctx.send(embed=self._create_success_embed(user_affected=user_to_ban, type="banned", guild=ctx.guild))
         await self._send_embed_to_log(ctx.guild, self._create_log_embed(user_affected=user_to_ban,
                                                                         responsible_mod=ctx.author,
