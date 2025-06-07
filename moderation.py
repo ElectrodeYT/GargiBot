@@ -514,7 +514,7 @@ class ModerationCog(commands.Cog):
 
         with open(file, 'a') as f:
             f.write(f'Purged {len(list_of_deleted)} messages in {ctx.channel.name} ({ctx.guild.name})\n')
-            for message in list_of_deleted:
+            for message in reversed(list_of_deleted):
                 f.write(f'\t{message.author.name} - {message.created_at} - id: ({message.id})\n')
                 f.write(f'\t\t{message.content.replace('\n', '\n\t\t')}\n')
             f.flush()
