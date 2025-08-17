@@ -7,10 +7,46 @@ from datetime import datetime, timezone
 
 from pprint import pprint
 
+def column_exists(table_name: str, column_name: str) -> bool:
+    cursor = sqlite_db.cursor()
+    cursor.execute(f"PRAGMA table_info({table_name})")
+    columns = cursor.fetchall()
+    cursor.close()
+    return any(column[1] == column_name for column in columns)
+
+
+def add_column(table_name: str, column_name: str, column_type: str, default_value: str | None = None) -> None:
+    cursor = sqlite_db.cursor()
+    if default_value is not None:
+        cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type} {default_value}")
+    else:
+        cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
+    cursor.close()
+    sqlite_db.commit()
+
+# We do this to make it easier to add new columns to the config table later on.
+CONFIG_COLUMNS = {
+    'guild': ('ID', 'PRIMARY KEY'),
+    'log_channel': ('CHANNEL', 'DEFAULT NULL'),
+    'ban_image_url': ('STRING', 'DEFAULT NULL'),
+    'kick_image_url': ('STRING', 'DEFAULT NULL'),
+    'unban_image_url': ('STRING', 'DEFAULT NULL'),
+    'active_user_stat_channel': ('CHANNEL', 'DEFAULT NULL'),
+    'total_users_stat_channel': ('CHANNEL', 'DEFAULT NULL'),
+    'ban_footer': ('STRING', 'DEFAULT NULL'),
+    'kick_footer': ('STRING', 'DEFAULT NULL')
+}
+
+
+def ensure_config_columns():
+    for column_name, (column_type, default) in CONFIG_COLUMNS.items():
+        if not column_exists('config', column_name):
+            add_column('config', column_name, column_type, default)
+
+
 sqlite_db = sqlite3.connect(os.environ.get('DB_FILENAME', 'gargibot.db'))
-sqlite_db.execute('CREATE TABLE IF NOT EXISTS config(guild ID PRIMARY KEY, log_channel CHANNEL DEFAULT NULL, ban_image_url STRING DEFAULT NULL,'
-                  ' kick_image_url STRING DEFAULT NULL, unban_image_url STRING DEFAULT NULL, active_user_stat_channel CHANNEL DEFAULT NULL, '
-                  'total_users_stat_channel CHANNEL DEFAULT NULL)')
+sqlite_db.execute('CREATE TABLE IF NOT EXISTS config(guild ID PRIMARY KEY)')
+ensure_config_columns()
 sqlite_db.execute('CREATE TABLE IF NOT EXISTS messages(message_id ID NOT NULL PRIMARY KEY, contents STRING, '
                   'author_id ID NOT NULL, created_at TIMESTAMP NOT NULL)')
 sqlite_db.execute('CREATE TABLE IF NOT EXISTS ban_owners(guild ID, banned_user ID, responsible_mod ID, '
@@ -332,3 +368,54 @@ def get_all_guild_tags(guild: discord.Guild) -> dict[str, str]:
     for tag_name, tag_content in res:
         tags[tag_name] = tag_content
     return tags
+
+
+def get_footer(guild: discord.Guild, type: str) -> str | None:
+    """Get the customized footer text for ban/kick embeds in the specified guild.
+
+    Args:
+        guild: The Discord guild to get the footer for
+        type: The type of footer to get - either 'ban' or 'kick'
+
+    Returns:
+        str | None: The footer text if set, None if no footer is configured
+
+    Raises:
+        ValueError: If type is not 'ban' or 'kick'
+    """
+    if type not in ['ban', 'kick']:
+        raise ValueError("Footer type must be either 'ban' or 'kick'")
+
+    cursor = sqlite_db.cursor()
+    cursor.execute(f'SELECT {type}_footer FROM config WHERE guild = ?', (guild.id,))
+    res = cursor.fetchone()
+    cursor.close()
+
+    if res is None:
+        return None
+    return res[0]
+
+
+def set_footer(guild: discord.Guild, footer_text: str | None, type: str) -> None:
+    """Set the footer text for the specified type (ban or kick) for the given guild.
+
+    Args:
+        guild: The Discord guild to set the footer for
+        footer_text: The text to set as the footer. If None, removes the footer
+        type: Either 'ban' or 'kick'
+
+    Raises:
+        ValueError: If type is not 'ban' or 'kick'
+    """
+    if type not in ['ban', 'kick']:
+        raise ValueError("Footer type must be either 'ban' or 'kick'")
+
+    cursor = sqlite_db.cursor()
+    if footer_text is not None:
+        cursor.execute(f'UPDATE config SET {type}_footer = ? WHERE guild = ?',
+                       (footer_text, guild.id))
+    else:
+        cursor.execute(f'UPDATE config SET {type}_footer = NULL WHERE guild = ?',
+                       (guild.id,))
+    cursor.close()
+    sqlite_db.commit()

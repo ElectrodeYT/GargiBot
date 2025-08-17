@@ -80,6 +80,17 @@ class ModerationCog(commands.Cog):
             embed.description = f'You have been {action_type}.'
         else:
             embed.description = f'You have been {action_type} for the following reason: `{reason}`.'
+
+        # Add footer if one is set
+        if action_type in ['banned', 'kicked']:
+            footer_type = {
+                'banned': 'ban',
+                'kicked': 'kick'
+            }
+            footer = db.get_footer(ctx.guild, footer_type[action_type])
+            if footer is not None:
+                embed.set_footer(text=footer)
+
         try:
             await user_affected.send(embed=embed)
         except discord.Forbidden:

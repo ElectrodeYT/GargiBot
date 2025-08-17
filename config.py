@@ -59,6 +59,21 @@ class ConfigCog(commands.Cog):
         else:
             await interaction.response.send_message(f'Successfully set {type} image URL to default', ephemeral=True)
 
+    @app_commands.command()
+    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.describe(type='The type of footer to set', footer='The text of the footer; leave empty to disable.')
+    async def set_footer(self, interaction: discord.Interaction, type: Literal['kick', 'ban'],
+                         footer: Optional[str] = None) -> None:
+        if interaction.guild is None:
+            await interaction.response.send_message('This command can only be used in a guild!', ephemeral=True)
+            return
+
+        db.set_footer(interaction.guild, footer, type)
+        if footer is not None:
+            await interaction.response.send_message(f'Successfully set {type} footer to {footer}', ephemeral=True)
+        else:
+            await interaction.response.send_message(f'Successfully disabled {type} footer', ephemeral=True)
+
     @commands.hybrid_command(name='about')
     async def about(self, ctx: commands.Context) -> None:
         embed = discord.Embed(
