@@ -94,6 +94,19 @@ class ModerationCog(commands.Cog):
             return False
         return True
 
+    async def do_ban(self, ctx: commands.Context, user_to_ban: discord.User | discord.Member, *,
+                      reason: str | None = None) -> None:
+        print(f'Banning user {user_to_ban.name} (responsible mod: {ctx.author.name})')
+        await self._send_dm(user_to_ban, action_type='banned', reason=reason, ctx=ctx)
+
+        await ctx.guild.ban(user=user_to_ban, reason=f'By {ctx.author.name} - {reason}', delete_message_days=0)
+        db.add_ban(ctx.guild, banned_user=user_to_ban, responsible_mod=ctx.author)
+        await ctx.send(embed=self._create_success_embed(user_affected=user_to_ban, type="banned", guild=ctx.guild))
+        await self._send_embed_to_log(ctx.guild, self._create_log_embed(user_affected=user_to_ban,
+                                                                        responsible_mod=ctx.author,
+                                                                        reason=reason,
+                                                                        log_type='banned'))
+
     @commands.hybrid_command(name='ban', description='Ban a member from this guild.', aliases=['naenae'])
     @commands.has_permissions(ban_members=True)
     @app_commands.describe(user_to_ban='The user to ban.', reason='The reason for the ban.')
@@ -112,16 +125,49 @@ class ModerationCog(commands.Cog):
                            'please report this bug to electrode!', ephemeral=True)
             return
 
-        print(f'Banning user {user_to_ban.name} (responsible mod: {ctx.author.name})')
-        await self._send_dm(user_to_ban, action_type='banned', reason=reason, ctx=ctx)
+        class RebanConfirmView(View):
+            def __init__(self, cog, ctx, user, reason):
+                super().__init__(timeout=60)
+                self.cog = cog
+                self.ctx = ctx
+                self.user = user
+                self.reason = reason
 
-        await ctx.guild.ban(user=user_to_ban, reason=f'By {ctx.author.name} - {reason}', delete_message_days=0)
-        db.add_ban(ctx.guild, banned_user=user_to_ban, responsible_mod=ctx.author)
-        await ctx.send(embed=self._create_success_embed(user_affected=user_to_ban, type="banned", guild=ctx.guild))
-        await self._send_embed_to_log(ctx.guild, self._create_log_embed(user_affected=user_to_ban,
-                                                                        responsible_mod=ctx.author,
-                                                                        reason=reason,
-                                                                        log_type='banned'))
+                confirm = Button(label="Re-ban User", style=discord.ButtonStyle.red)
+                confirm.callback = self.confirm_callback
+                self.add_item(confirm)
+
+                cancel = Button(label="Cancel", style=discord.ButtonStyle.grey)
+                cancel.callback = self.cancel_callback
+                self.add_item(cancel)
+
+            async def confirm_callback(self, interaction: discord.Interaction):
+                if interaction.user.id != self.ctx.author.id:
+                    await interaction.response.send_message("You cannot use this button!", ephemeral=True)
+                    return
+
+                await interaction.message.edit(view=None)
+                await self.cog.do_ban(self.ctx, self.user, reason=self.reason)
+
+            async def cancel_callback(self, interaction: discord.Interaction):
+                if interaction.user.id != self.ctx.author.id:
+                    await interaction.response.send_message("You cannot use this button!", ephemeral=True)
+                    return
+
+                await interaction.message.edit(view=None)
+                await interaction.response.send_message("Ban cancelled.")
+
+        # Check if user is already banned
+        try:
+            ban = await ctx.guild.fetch_ban(user_to_ban)
+            view = RebanConfirmView(self, ctx, user_to_ban, reason)
+            await ctx.send(f"{user_to_ban.name} is already banned! Would you like to re-ban them? "
+                           f"(Changes the responsible moderator + ban reason)", view=view)
+            return
+        except discord.NotFound:
+            pass
+
+        await self.do_ban(ctx, user_to_ban, reason=reason)
 
     @commands.hybrid_command(name='kick', description='Kick a member from this guild.', aliases=['dabon'])
     @commands.has_permissions(kick_members=True)
