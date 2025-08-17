@@ -590,7 +590,7 @@ class ModerationCog(commands.Cog):
 
     @commands.hybrid_command(name='info', description='Get information about a user.')
     @app_commands.describe(user='The user to get information about.')
-    async def info(self, ctx: commands.Context, user: discord.Member) -> None:
+    async def info(self, ctx: commands.Context, user: discord.Member | discord.User) -> None:
         if ctx.guild is None:
             await ctx.send('This command can only be used in a guild.', ephemeral=True)
             return
@@ -599,19 +599,24 @@ class ModerationCog(commands.Cog):
             await ctx.send('I am a bot!', ephemeral=True)
             return
 
-        embed = discord.Embed(title=f'Info for {user.name}',
-                              description=f'{f'AKA: {user.nick}, ' if user.nick is not None else ''}ID: {user.id}')
+        embed = discord.Embed(title=f'Info for {user.name}')
+        if isinstance(user, discord.Member):
+            embed.description = f'{f'AKA: {user.nick}, ' if user.nick is not None else ''}ID: {user.id}'
+
         embed.set_thumbnail(url=user.display_avatar.url)
 
-        if type(user.status) is not str:
+        if isinstance(user, discord.Member) and type(user.status) is not str:
             embed.add_field(name='Overall Status', value=user.status, inline=False)
             embed.add_field(name='Desktop Status', value=user.desktop_status)
             embed.add_field(name='Mobile Status', value=user.mobile_status)
             embed.add_field(name='Web Status', value=user.web_status)
 
         embed.add_field(name='Created at', value=f'<t:{int(user.created_at.timestamp())}:f>', inline=False)
-        embed.add_field(name='Joined at', value=f'<t:{int(user.joined_at.timestamp())}:f>', inline=False)
 
-        embed.add_field(name='Seen on', value='\n'.join([guild.name for guild in user.mutual_guilds]), inline=False)
+        if isinstance(user, discord.Member):
+            embed.add_field(name='Joined at', value=f'<t:{int(user.joined_at.timestamp())}:f>', inline=False)
+
+        if len(user.mutual_guilds) > 0:
+            embed.add_field(name='Seen on', value='\n'.join([guild.name for guild in user.mutual_guilds]), inline=False)
 
         await ctx.send(embed=embed)
