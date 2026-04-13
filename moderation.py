@@ -588,7 +588,7 @@ class ModerationCog(commands.Cog):
                 embed.add_field(name='Log file', value=f'[Link]({purge_logs_url_prepend}{file.name})')
             await log_channel.send(embed=embed)
 
-    @commands.hybrid_command(name='info', description='Get information about a user.')
+    @commands.hybrid_command(name='info', description='Get information about a user.', aliases=['palantir'])
     @app_commands.describe(user='The user to get information about.')
     async def info(self, ctx: commands.Context, user: discord.Member | discord.User) -> None:
         if ctx.guild is None:
