@@ -284,7 +284,7 @@ class ModerationCog(commands.Cog):
 
         # Send the embed that is sent into the channel
         embed = discord.Embed(description=f'Muted {user_to_mute.mention} '
-                                          f'{('for' + str(mute_time_delta)) if not indefinite_mute else 'indefinitely'}'
+                                          f'{('for ' + str(mute_time_delta)) if not indefinite_mute else 'indefinitely'}'
                                           f' - `{reason}`', color=discord.Color.orange())
         await ctx.send(embed=embed)
 
