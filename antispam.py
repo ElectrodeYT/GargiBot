@@ -2,6 +2,7 @@ from difflib import SequenceMatcher
 from datetime import timedelta
 import discord
 
+import random
 from discord.ext import commands
 
 class GuildAntispamEngine:
@@ -91,6 +92,16 @@ class AntiSpamCog(commands.Cog):
     async def on_message(self, message: discord.Message) -> None:
         if message.author.bot:
             return
+
+        if self.bot.user.mentioned_in(message):
+            if "meow" in message.content.lower() or "mrrp" in message.content.lower() or "wah" in message.content.lower() or "miaow" in message.content.lower():
+                sounds = ["meow", "mrrp", "wah", "meow", "meow", "meow", "mrrp", "mrrp", "wah", "miaow", "mrrrrppp"]
+                count = random.randint(1, 3)
+
+                response_list = [random.choice(sounds) for _ in range(count)]
+                response = " ".join(response_list)
+
+                await message.reply(response)
 
         if message.guild.id not in self.guild_antispam_engines:
             self.guild_antispam_engines[message.guild.id] = GuildAntispamEngine(message.guild)
