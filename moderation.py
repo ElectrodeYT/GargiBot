@@ -119,7 +119,6 @@ class ModerationCog(commands.Cog):
                                                                         log_type='banned'))
 
     @commands.hybrid_command(name='ban', description='Ban a member from this guild.', aliases=['naenae'])
-    @commands.has_permissions(ban_members=True)
     @app_commands.describe(user_to_ban='The user to ban.', reason='The reason for the ban.')
     async def ban(self, ctx: commands.Context, user_to_ban: discord.User | discord.Member, *,
                   reason: str | None = None) -> None:
@@ -181,7 +180,6 @@ class ModerationCog(commands.Cog):
         await self.do_ban(ctx, user_to_ban, reason=reason)
 
     @commands.hybrid_command(name='kick', description='Kick a member from this guild.', aliases=['dabon'])
-    @commands.has_permissions(kick_members=True)
     @app_commands.describe(user_to_kick='The user to kick.', reason='The reason for the kick.')
     async def kick(self, ctx: commands.Context, user_to_kick: discord.User | discord.Member, *,
                    reason: str | None = None) -> None:
